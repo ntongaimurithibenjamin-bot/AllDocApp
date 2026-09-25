@@ -1,0 +1,29 @@
+/* Docuna overrides for the bundled PDF.js viewer. The app provides its own native toolbar. */
+
+#toolbarContainer,
+#secondaryToolbar,
+#findbar,
+#editorModeButtons,
+#sidebarContainer,
+#loadingBar {
+  display: none !important;
+}
+
+#outerContainer #mainContainer #viewerContainer {
+  inset: 0 !important;
+  top: 0 !important;
+}
+
+#viewerContainer {
+  background-color: #e9ecef;
+}
+
+/* Night mode: invert page content but keep photos recognisable (hue rotated back). */
+.docuna-night #viewerContainer {
+  background-color: #111418;
+}
+
+.docuna-night #viewer .page {
+  filter: invert(0.9) hue-rotate(180deg);
+  border-color: transparent;
+}

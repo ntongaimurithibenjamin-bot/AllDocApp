@@ -29,7 +29,7 @@ function ToolButton({ icon, label, onPress, active = false }: { icon: IconName; 
       className="min-w-14 flex-1 items-center py-2"
     >
       <Icon name={icon} color={active ? 'primary' : 'text'} />
-      <Text className={`mt-1 text-xs ${active ? 'text-primary' : 'text-text'}`}>{label}</Text>
+      <Text textBreakStrategy="simple" className={`mt-1 text-xs ${active ? 'text-primary' : 'text-text'}`}>{label}</Text>
     </Pressable>
   );
 }

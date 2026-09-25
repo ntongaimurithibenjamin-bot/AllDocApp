@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useState } from 'react';
-import { useSQLiteContext } from 'expo-sqlite';
 
+import { useDatabase } from '@/db/DatabaseProvider';
 import { subscribeToChanges, type DataTopic } from '@/db/events';
 import type { SqlDb } from '@/db/types';
 import { toAppError, type AppError } from '@/domain/errors';
@@ -30,7 +30,7 @@ export function useDbQuery<T>(
   deps: readonly QueryDep[],
   topics: readonly DataTopic[],
 ): DbQueryState<T> {
-  const db = useSQLiteContext();
+  const db = useDatabase();
   const [version, setVersion] = useState(0);
   const [result, setResult] = useState<Result<T>>({ key: '', data: undefined, error: null });
 
@@ -82,5 +82,5 @@ export function useDbQuery<T>(
 
 /** The app database, typed as the repository interface. */
 export function useDb(): SqlDb {
-  return useSQLiteContext();
+  return useDatabase();
 }

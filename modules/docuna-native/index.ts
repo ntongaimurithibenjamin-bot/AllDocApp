@@ -15,7 +15,7 @@ export interface ProcessImageOptions {
   quad?: NormalizedPoint[] | null;
   rotation?: 0 | 90 | 180 | 270;
   filter?: NativeFilter;
-  /** Longest output edge in pixels; 0 = working resolution (3000 px). */
+  /** Longest output edge in pixels; 0 = device working size (3000 px, 2000 px on low-RAM phones). */
   maxDimension?: number;
   quality?: number;
 }
@@ -31,6 +31,15 @@ interface DocunaNativeModule {
   scanDocumentAsync(options: { pageLimit?: number; allowGalleryImport?: boolean }): Promise<{ pageUris: string[] } | null>;
   getImageInfoAsync(uri: string): Promise<{ width: number; height: number }>;
   processImageAsync(options: ProcessImageOptions): Promise<ImageResult>;
+  /** Rejects with ERR_PDF_ENCRYPTED for password-protected PDFs, ERR_PDF_OPEN for unreadable ones. */
+  getPdfInfoAsync(uri: string): Promise<{ pageCount: number }>;
+  renderPdfPageAsync(options: {
+    uri: string;
+    pageIndex: number;
+    outputUri: string;
+    maxDimension?: number;
+    quality?: number;
+  }): Promise<ImageResult>;
 }
 
 /** Null when running without the native module (e.g. Expo Go). */

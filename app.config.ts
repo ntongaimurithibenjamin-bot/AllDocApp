@@ -57,6 +57,8 @@ const config: ExpoConfig = {
         microphonePermission: false,
       },
     ],
+    // Offline PDF reader (Mozilla PDF.js) bundled as Android assets.
+    './plugins/withPdfJsAssets',
   ],
   experiments: {
     typedRoutes: true,

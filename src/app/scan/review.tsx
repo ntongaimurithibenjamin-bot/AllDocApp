@@ -2,6 +2,7 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
+import { BottomBar } from '@/components/BottomBar';
 import { Button } from '@/components/Button';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorView } from '@/components/ErrorView';
@@ -141,10 +142,10 @@ export default function ScanReviewScreen() {
         </View>
       </ScrollView>
 
-      <View className="flex-row gap-3 border-t border-border bg-surface px-4 py-3">
+      <BottomBar>
         <Button label="Discard" variant="secondary" icon="delete-outline" onPress={confirmDiscard} disabled={discard.pending} />
         <Button label="Done" icon="check" onPress={() => done.run()} loading={done.pending} className="flex-1" />
-      </View>
+      </BottomBar>
 
       <NewFolderDialog
         visible={newFolderVisible}

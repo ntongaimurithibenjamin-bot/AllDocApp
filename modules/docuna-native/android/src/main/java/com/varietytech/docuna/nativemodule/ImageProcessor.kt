@@ -1,5 +1,6 @@
 package com.varietytech.docuna.nativemodule
 
+import android.app.ActivityManager
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -35,7 +36,7 @@ class ProcessImageOptions : Record {
   @Field var rotation: Int = 0
   /** original | enhanced | grayscale | bw */
   @Field var filter: String = "original"
-  /** Longest edge of the output in pixels; 0 = keep (bounded by MAX_WORKING_DIMENSION). */
+  /** Longest edge of the output in pixels; 0 = the device working size (3000 px, or 2000 px on low-RAM phones). */
   @Field var maxDimension: Int = 0
   @Field var quality: Int = 90
 }
@@ -53,8 +54,25 @@ class ImageWriteException(cause: Throwable) :
  * 20-page document never holds more than one decoded page in memory.
  */
 object ImageProcessor {
-  /** ~250 DPI for an A4 page: plenty for reading, printing and OCR, and bounded in memory. */
-  private const val MAX_WORKING_DIMENSION = 3000
+  /** ~250 DPI for an A4 page: plenty for reading, printing and OCR. */
+  private const val FULL_WORKING_DIMENSION = 3000
+  /** ~170 DPI: still sharp and OCR-friendly, and fits the small heaps of Android Go phones. */
+  private const val LOW_RAM_WORKING_DIMENSION = 2000
+
+  @Volatile private var workingDimension = 0
+
+  /**
+   * Longest edge we decode and process at. Peak memory is roughly two ARGB bitmaps of this size
+   * (source + warped output): ~72 MB at 3000 px, ~32 MB at 2000 px.
+   */
+  private fun maxWorkingDimension(context: Context): Int {
+    if (workingDimension == 0) {
+      val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+      workingDimension =
+        if (am.isLowRamDevice || am.memoryClass <= 256) LOW_RAM_WORKING_DIMENSION else FULL_WORKING_DIMENSION
+    }
+    return workingDimension
+  }
 
   fun orientedSize(context: Context, uri: String): Pair<Int, Int> {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -65,15 +83,16 @@ object ImageProcessor {
   }
 
   fun process(context: Context, options: ProcessImageOptions): ProcessedImage {
-    val target = if (options.maxDimension > 0) min(options.maxDimension, MAX_WORKING_DIMENSION) else MAX_WORKING_DIMENSION
+    val working = maxWorkingDimension(context)
+    val target = if (options.maxDimension > 0) min(options.maxDimension, working) else working
     // When cropping, decode at working resolution so the crop keeps detail; otherwise decode
     // close to the target size to save memory (thumbnails decode tiny bitmaps).
-    val decodeTarget = if (options.quad != null) MAX_WORKING_DIMENSION else target
+    val decodeTarget = if (options.quad != null) working else target
 
     var bitmap = decodeOriented(context, options.sourceUri, decodeTarget)
     options.quad?.let { quad ->
       if (quad.size != 4) throw InvalidImageException("Crop needs exactly 4 corners")
-      bitmap = replace(bitmap, warpPerspective(bitmap, quad))
+      bitmap = replace(bitmap, warpPerspective(bitmap, quad, working))
     }
     if (options.rotation % 360 != 0) {
       bitmap = replace(bitmap, rotate(bitmap, options.rotation))
@@ -132,7 +151,7 @@ object ImageProcessor {
 
   // --- geometry -------------------------------------------------------------------------------
 
-  private fun warpPerspective(source: Bitmap, quad: List<NormalizedPoint>): Bitmap {
+  private fun warpPerspective(source: Bitmap, quad: List<NormalizedPoint>, maxDimension: Int): Bitmap {
     val w = source.width.toFloat()
     val h = source.height.toFloat()
     val pts = quad.map { floatArrayOf((it.x.coerceIn(0.0, 1.0) * w).toFloat(), (it.y.coerceIn(0.0, 1.0) * h).toFloat()) }
@@ -142,7 +161,7 @@ object ImageProcessor {
     var outW = max(dist(tl, tr), dist(bl, br))
     var outH = max(dist(tl, bl), dist(tr, br))
     if (outW < 16 || outH < 16) throw InvalidImageException("Crop area is too small")
-    val scale = min(1f, MAX_WORKING_DIMENSION / max(outW, outH))
+    val scale = min(1f, maxDimension / max(outW, outH))
     outW *= scale
     outH *= scale
 

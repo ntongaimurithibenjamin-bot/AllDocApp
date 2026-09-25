@@ -28,7 +28,7 @@ type Source = 'scanner' | 'camera' | 'photos';
 
 type State =
   | { phase: 'checking' }
-  | { phase: 'choose'; availability: ScannerAvailability; error?: AppError }
+  | { phase: 'choose'; availability: ScannerAvailability; error?: AppError; scannerFailed?: boolean }
   | { phase: 'capturing' }
   | { phase: 'saving'; done: number; total: number };
 
@@ -76,7 +76,9 @@ export default function ScanScreen() {
       }
       await saveCapture(replacing ? uris.slice(0, 1) : uris, source);
     } catch (error) {
-      setState({ phase: 'choose', availability, error: toAppError(error) });
+      // Google's scanner can refuse to start (e.g. on low-RAM Android Go phones): fall back to the
+      // camera instead of offering the same failing button again.
+      setState({ phase: 'choose', availability, error: toAppError(error), scannerFailed: source === 'scanner' });
     }
   };
 
@@ -104,8 +106,8 @@ export default function ScanScreen() {
     );
   }
 
-  const { availability, error } = state;
-  const canScan = availability === 'available';
+  const { availability, error, scannerFailed = false } = state;
+  const canScan = availability === 'available' && !scannerFailed;
   const canUsePhone = availability !== 'needs_native_build';
 
   return (

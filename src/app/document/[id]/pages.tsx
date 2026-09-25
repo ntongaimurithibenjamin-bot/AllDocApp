@@ -4,6 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import Animated, { useAnimatedRef } from 'react-native-reanimated';
 import Sortable, { type SortableGridRenderItem } from 'react-native-sortables';
 
+import { BottomBar } from '@/components/BottomBar';
 import { Button } from '@/components/Button';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorView } from '@/components/ErrorView';
@@ -68,14 +69,14 @@ export default function PagesScreen() {
           />
         </Animated.ScrollView>
       )}
-      <View className="flex-row gap-3 border-t border-border bg-surface px-4 py-3">
+      <BottomBar>
         <Button
           label="Add pages"
           icon="plus"
           onPress={() => router.push({ pathname: '/scan', params: { documentId: id } })}
           className="flex-1"
         />
-      </View>
+      </BottomBar>
     </View>
   );
 }

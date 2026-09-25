@@ -101,5 +101,14 @@ class DocunaNativeModule : Module() {
       val result = ImageProcessor.process(context, options)
       mapOf("uri" to result.uri, "width" to result.width, "height" to result.height)
     }
+
+    AsyncFunction("getPdfInfoAsync") { uri: String ->
+      mapOf("pageCount" to PdfPageRenderer.pageCount(context, uri))
+    }
+
+    AsyncFunction("renderPdfPageAsync") { options: RenderPdfPageOptions ->
+      val result = PdfPageRenderer.renderPage(context, options)
+      mapOf("uri" to result.uri, "width" to result.width, "height" to result.height)
+    }
   }
 }

@@ -2,52 +2,49 @@ import '../../global.css';
 
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider, type ErrorBoundaryProps } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { SQLiteProvider, type SQLiteDatabase } from 'expo-sqlite';
 import { StatusBar } from 'expo-status-bar';
 import { Suspense, useEffect, useMemo } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import { migrate } from '@/db/migrations';
+import { DatabaseProvider, useDatabase } from '@/db/DatabaseProvider';
 import { getSetting } from '@/db/repositories/settings';
 import { toAppError } from '@/domain/errors';
 import { applyThemePreference } from '@/services/appearance';
 import { purgeExpiredTrash } from '@/services/documents/lifecycle';
 import { useTheme } from '@/theme';
 
-export const DATABASE_NAME = 'docuna.db';
-
 SplashScreen.preventAutoHideAsync().catch(() => {
   // Already hidden (e.g. fast refresh); nothing to do.
 });
-
-async function initializeDatabase(db: SQLiteDatabase): Promise<void> {
-  await migrate(db);
-  applyThemePreference(await getSetting(db, 'themePreference'));
-  // Housekeeping must never block startup.
-  purgeExpiredTrash(db).catch((error: unknown) => {
-    if (__DEV__) console.warn('Trash purge failed', error);
-  });
-}
 
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <Suspense fallback={null}>
-        <SQLiteProvider databaseName={DATABASE_NAME} onInit={initializeDatabase} useSuspense>
+        <DatabaseProvider>
           <AppShell />
-        </SQLiteProvider>
+        </DatabaseProvider>
       </Suspense>
     </GestureHandlerRootView>
   );
 }
 
 function AppShell() {
+  const db = useDatabase();
   const { scheme, colors, cssVars } = useTheme();
 
   useEffect(() => {
-    SplashScreen.hideAsync().catch(() => {});
-  }, []);
+    // Apply the saved theme before the splash screen hides, so the first frame is already right.
+    getSetting(db, 'themePreference')
+      .then(applyThemePreference)
+      .catch(() => {})
+      .finally(() => SplashScreen.hideAsync().catch(() => {}));
+    // Housekeeping must never block startup.
+    purgeExpiredTrash(db).catch((error: unknown) => {
+      if (__DEV__) console.warn('Trash purge failed', error);
+    });
+  }, [db]);
 
   const navigationTheme = useMemo(() => {
     const base = scheme === 'dark' ? DarkTheme : DefaultTheme;

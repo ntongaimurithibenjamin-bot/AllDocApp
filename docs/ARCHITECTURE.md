@@ -476,3 +476,39 @@ All resolved; see §0.
 - Tests: repositories run against Node 24's built-in `node:sqlite`, which includes FTS5, so there's no native test dependency (`npm test`).
 - Tooling: TypeScript 6 defaults `types` to `[]`, so `tsconfig.json` lists `jest` and `node` explicitly. `react-dom` is pinned to 19.2.3 in devDependencies to stop npm pulling a React 19.3 peer.
 - Verified: `npm run typecheck`, `npm run lint`, `npm test` (19 tests), `npx expo export --platform android`, `npx expo-doctor` (21/21). Not yet run on a device or emulator.
+
+---
+
+## 14. Phase 2 — as built (2026-09-25)
+
+**Native module** `modules/docuna-native` (Kotlin Expo Module, Android only; loaded with `requireOptionalNativeModule`, so Expo Go still runs and shows an honest "not available in this preview"):
+
+| Function | What it does |
+|---|---|
+| `isScannerAvailableAsync()` | Google Play services check (ML Kit scanner needs it) |
+| `scanDocumentAsync({ pageLimit, allowGalleryImport })` | Opens the ML Kit Document Scanner (full mode: auto-capture, edge detection, crop, filters, multi-page, gallery import). Returns temp JPEG URIs or `null` on cancel |
+| `processImageAsync({ sourceUri, outputUri, quad, rotation, filter, maxDimension, quality })` | Bounded decode (≤3000 px, `inSampleSize`), EXIF orientation, perspective warp (`Matrix.setPolyToPoly`), rotation, filters (enhanced colour matrix, grayscale, B&W via Otsu threshold), JPEG encode. One bitmap at a time, recycled eagerly |
+| `getImageInfoAsync(uri)` | Oriented pixel size without decoding |
+
+Gradle deps: `play-services-mlkit-document-scanner:16.0.0`, `androidx.exifinterface:1.4.2`. No OpenCV.
+
+**Flows**
+- **Scan:** Scan tab → ML Kit scanner opens immediately → pages are saved one at a time (with a progress count) → a document is created in the inbox → Review (name, folder, Add pages, Discard, Done). Pages are persisted before Review, so backing out never loses a scan.
+- **Fallback** (no Play services): system camera or photo picker, then the manual Crop screen.
+- **Page workspace** (`document/[id]/pages`): 3-column drag-to-reorder grid (react-native-sortables), with auto-scroll.
+- **Page editor** (`document/[id]/page/[pageId]`): Crop, Rotate, Filter (Original / Enhanced / Grayscale / B&W), Duplicate, Replace, Delete. Includes a page strip, "Page n of N" and Saving…/Saved status.
+- **Crop** (`…/crop`): four draggable corners on the untouched original (Reanimated 4 `get`/`set`, SVG outline); a convexity check blocks folded quads.
+
+**Page file model:** every page has an untouched `original-*` file. Edits always re-render from the original (crop → rotate → filter), so quality never compounds; the result goes to `processed-*` plus `thumb-*`. File names are versioned on every write, so image caches never show stale pages. Superseded files are deleted after the DB commit, and new files are deleted if the commit fails. Any image change resets that page's OCR.
+
+**Imports are all-or-nothing:** pages are prepared one by one, then inserted in one transaction. On failure, every written file is removed; a brand-new document is removed entirely.
+
+**Permissions:**
+- CAMERA: fallback capture only.
+- RECORD_AUDIO: blocked.
+- Storage permissions: capped at API 32; needed only by the camera fallback on Android 9 and older.
+- `SYSTEM_ALERT_WINDOW`: blocked in production (dev-menu only).
+
+**Tests:** 29 in total. They include page-service rollback and file clean-up (native image processing and the filesystem mocked, real SQLite) and the page-edit rules (rotation, crop normalisation, quad validity).
+
+**Dev machine note:** the dev PC has 7.8 GB RAM. Don't run a Gradle native build and the emulator at the same time. Build first, then boot the emulator (or use a USB phone, or `eas build --profile development`).
