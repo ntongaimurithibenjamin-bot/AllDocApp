@@ -19,7 +19,7 @@ export default function ScanScreen() {
           Scanner not available in this build
         </Text>
         <Text className="mt-3 text-center text-base text-muted">
-          Docuna's scanner runs entirely on your phone, with automatic edge detection, multi-page capture and
+          Docuna’s scanner runs entirely on your phone, with automatic edge detection, multi-page capture and
           cleanup filters. It needs a native build of the app, which is the next step in development.
         </Text>
         <Button label="Close" variant="secondary" onPress={() => router.back()} className="mt-8 self-stretch" />

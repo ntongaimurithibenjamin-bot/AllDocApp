@@ -1,6 +1,6 @@
 # Docuna — Architecture
 
-Date: 2026-09-25 · Status: **approved; Phase 1 in progress**
+Date: 2026-09-25 · Status: **approved; Phase 1 complete, Phase 2 next**
 
 ## 0. Decisions (2026-09-25)
 
@@ -78,10 +78,10 @@ Changes vs. the brief, with reasons:
 - `document/reader.tsx` etc. have no document id → nested dynamic segment `document/[id]/…`.
 - `scan/capture|filters|complete` are handled inside the ML Kit scanner UI → removed. The **Scan tab button launches the scanner directly** (custom tab button), so there are no extra screens (§31).
 - Generic `ai/index|ask|summarize|extract` chat area → contextual `document/[id]/ai` (§33). Only `ai/compare` is top-level, since it spans two documents.
-- Non-route code lives in `src/` so Expo Router never treats it as a route.
+- Routes live in `src/app/` (the SDK 57 convention); non-route code lives elsewhere in `src/` so Expo Router never treats it as a route. Routes are added phase by phase, so a route exists only once its screen works.
 
 ```text
-app/
+src/app/
 ├── _layout.tsx                 # DB migrate, theme, error boundary, root Stack
 ├── (tabs)/
 │   ├── _layout.tsx             # Home · Documents · [Scan] · Search · Settings
@@ -115,7 +115,7 @@ app/
     ├── privacy.tsx
     └── subscription.tsx
 
-src/
+src/   (non-route code)
 ├── config/                     # env (EXPO_PUBLIC_*), feature flags, limits
 ├── theme/                      # tokens, light/dark, typography
 ├── domain/                     # pure TS models + rules (platform-independent, unit-tested)
@@ -454,3 +454,25 @@ Proposed `minSdkVersion` is **24** (Android 7), the SDK 57 default. Verify this 
 ## 12. Decisions
 
 All resolved; see §0.
+
+---
+
+## 13. Phase 1 — as built (2026-09-25)
+
+**Routes:** `(tabs)/{index,documents,scan,search,settings}`, `scan/index`, `document/[id]/{index,move}`, `folders/[id]`, `inbox`, `trash`, `settings/{storage,privacy}`, `+not-found`.
+
+**Working now (Expo Go):**
+- Documents: rename, favourite, archive, move to folder, mark as filed, trash with 30-day retention, restore, empty trash.
+- Folders: create, rename, delete (documents become unfiled).
+- Search over titles, using FTS5, with OCR page text wired in and awaiting Phase 4.
+- Light, dark or system theme; storage usage; clearing the cache; privacy statement; error boundary.
+
+**Explicitly pending:** the Scan screen says the scanner needs the Phase 2 native build. A development-only "Create empty test document" row in Settings lets the flows be exercised until then.
+
+**Key implementation notes**
+- Routes live in `src/app/`. Tabs use `expo-router/js-tabs`, because plain `Tabs` from `expo-router` is deprecated in SDK 57.
+- NativeWind v4: colours are CSS variables set once on the root view from `src/theme/palette.js`. Tailwind, the navigation theme and icons all read that one palette. The theme preference is applied through `Appearance.setColorScheme`.
+- Data flow: repositories are plain functions over the `SqlDb` interface and call `notifyChanged(topic)` after writes. `useDbQuery` re-runs queries for the topics it watches.
+- Tests: repositories run against Node 24's built-in `node:sqlite`, which includes FTS5, so there's no native test dependency (`npm test`).
+- Tooling: TypeScript 6 defaults `types` to `[]`, so `tsconfig.json` lists `jest` and `node` explicitly. `react-dom` is pinned to 19.2.3 in devDependencies to stop npm pulling a React 19.3 peer.
+- Verified: `npm run typecheck`, `npm run lint`, `npm test` (19 tests), `npx expo export --platform android`, `npx expo-doctor` (21/21). Not yet run on a device or emulator.

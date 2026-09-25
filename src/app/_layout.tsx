@@ -107,7 +107,7 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
       style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, backgroundColor: colors.background }}
     >
       <Text style={{ color: colors.text, fontSize: 18, fontWeight: '600', textAlign: 'center' }}>
-        Docuna couldn't start
+        Docuna couldn’t start
       </Text>
       <Text style={{ color: colors.muted, fontSize: 15, marginTop: 8, textAlign: 'center' }}>
         {appError.userMessage} Your documents have not been changed.
