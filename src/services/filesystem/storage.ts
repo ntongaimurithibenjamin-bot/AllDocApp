@@ -1,0 +1,93 @@
+import { Directory, File, Paths } from 'expo-file-system';
+
+import { toAppError } from '@/domain/errors';
+
+/**
+ * App-private file layout. Canonical copies live under documents/ so they survive cache eviction;
+ * reader tiles and other derivatives live under cache/ and may be deleted at any time.
+ *
+ *   <document>/docs/<docId>/pages/<pageId>/{original,processed,thumb}.jpg
+ *   <document>/docs/<docId>/document.pdf
+ *   <cache>/render/<docId>/…
+ */
+const docsRoot = () => new Directory(Paths.document, 'docs');
+const renderRoot = () => new Directory(Paths.cache, 'render');
+
+export type PageFileKind = 'original' | 'processed' | 'thumb';
+
+export function documentDirectory(documentId: string): Directory {
+  return new Directory(docsRoot(), documentId);
+}
+
+export function pageDirectory(documentId: string, pageId: string): Directory {
+  return new Directory(documentDirectory(documentId), 'pages', pageId);
+}
+
+export function pageFile(documentId: string, pageId: string, kind: PageFileKind): File {
+  return new File(pageDirectory(documentId, pageId), `${kind}.jpg`);
+}
+
+export function documentPdfFile(documentId: string): File {
+  return new File(documentDirectory(documentId), 'document.pdf');
+}
+
+/** Creates the page directory (and parents) if needed and returns it. */
+export function ensurePageDirectory(documentId: string, pageId: string): Directory {
+  try {
+    const dir = pageDirectory(documentId, pageId);
+    dir.create({ intermediates: true, idempotent: true });
+    return dir;
+  } catch (error) {
+    throw toAppError(error, 'storage_failure');
+  }
+}
+
+function deleteIfExists(entry: File | Directory): void {
+  if (entry.exists) entry.delete();
+}
+
+export function deleteDocumentFiles(documentId: string): void {
+  try {
+    deleteIfExists(documentDirectory(documentId));
+    deleteIfExists(new Directory(renderRoot(), documentId));
+  } catch (error) {
+    throw toAppError(error, 'storage_failure');
+  }
+}
+
+export function deletePageFiles(documentId: string, pageId: string): void {
+  try {
+    deleteIfExists(pageDirectory(documentId, pageId));
+  } catch (error) {
+    throw toAppError(error, 'storage_failure');
+  }
+}
+
+export interface StorageUsage {
+  /** Bytes used by documents (originals, processed pages, PDFs). */
+  documentsBytes: number;
+  /** Bytes used by regenerable caches. */
+  cacheBytes: number;
+  /** Free bytes on the device's internal storage. */
+  freeBytes: number;
+  totalBytes: number;
+}
+
+export function getStorageUsage(): StorageUsage {
+  const docs = docsRoot();
+  const render = renderRoot();
+  return {
+    documentsBytes: docs.exists ? (docs.size ?? 0) : 0,
+    cacheBytes: render.exists ? (render.size ?? 0) : 0,
+    freeBytes: Paths.availableDiskSpace,
+    totalBytes: Paths.totalDiskSpace,
+  };
+}
+
+export function clearRenderCache(): void {
+  try {
+    deleteIfExists(renderRoot());
+  } catch (error) {
+    throw toAppError(error, 'storage_failure');
+  }
+}

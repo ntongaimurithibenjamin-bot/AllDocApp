@@ -1,0 +1,69 @@
+import { useEffect, useState } from 'react';
+import { KeyboardAvoidingView, Modal, Pressable, Text, TextInput, View } from 'react-native';
+
+import { useTheme } from '@/theme';
+
+import { Button } from './Button';
+
+interface PromptDialogProps {
+  visible: boolean;
+  title: string;
+  initialValue?: string;
+  placeholder?: string;
+  confirmLabel?: string;
+  onConfirm: (value: string) => void;
+  onCancel: () => void;
+}
+
+/** Single text-field dialog (Alert.prompt is iOS-only). */
+export function PromptDialog({
+  visible,
+  title,
+  initialValue = '',
+  placeholder,
+  confirmLabel = 'Save',
+  onConfirm,
+  onCancel,
+}: PromptDialogProps) {
+  const { colors } = useTheme();
+  const [value, setValue] = useState(initialValue);
+
+  useEffect(() => {
+    if (visible) setValue(initialValue);
+  }, [visible, initialValue]);
+
+  const canConfirm = value.trim().length > 0;
+  const confirm = () => {
+    if (canConfirm) onConfirm(value);
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel} statusBarTranslucent>
+      <KeyboardAvoidingView behavior="padding" className="flex-1">
+        <Pressable accessibilityLabel="Close dialog" onPress={onCancel} className="flex-1 justify-center bg-black/50 px-6">
+          <Pressable className="rounded-2xl bg-surface p-5">
+            <Text accessibilityRole="header" className="mb-4 text-lg font-semibold text-text">
+              {title}
+            </Text>
+            <TextInput
+              autoFocus
+              value={value}
+              onChangeText={setValue}
+              placeholder={placeholder}
+              placeholderTextColor={colors.muted}
+              selectTextOnFocus
+              returnKeyType="done"
+              onSubmitEditing={confirm}
+              maxLength={120}
+              className="rounded-xl border border-border bg-background px-4 py-3 text-base text-text"
+            />
+            <View className="mt-5 flex-row justify-end gap-2">
+              <Button label="Cancel" variant="ghost" onPress={onCancel} />
+              <Button label={confirmLabel} onPress={confirm} disabled={!canConfirm} />
+            </View>
+          </Pressable>
+        </Pressable>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}

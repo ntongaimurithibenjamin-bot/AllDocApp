@@ -23,7 +23,7 @@ function fakePage(name: string): NewPage {
 }
 
 async function pageOrder(db: SqlDb, documentId: string): Promise<string[]> {
-  return (await pages.listPages(db, documentId)).map((page) => page.originalUri.split('/')[3]!);
+  return (await pages.listPages(db, documentId)).map((page) => page.originalUri.split('/')[4]!);
 }
 
 let db: SqlDb;
