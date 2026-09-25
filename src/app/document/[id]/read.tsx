@@ -11,6 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes';
 
+import { Button } from '@/components/Button';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorView } from '@/components/ErrorView';
 import { Icon, type IconName } from '@/components/Icon';
@@ -23,14 +24,16 @@ import { listPages } from '@/db/repositories/pages';
 import { getSetting, setSetting } from '@/db/repositories/settings';
 import { AppError, toAppError } from '@/domain/errors';
 import { fileExtension } from '@/domain/fileTypes';
-import type { Document, Page } from '@/domain/models';
+import { OFFICE_KINDS, type Document, type Page } from '@/domain/models';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useDb, useDbQuery } from '@/hooks/useDbQuery';
+import { openInAnotherApp } from '@/services/files/openExternal';
 import { shareDocumentFile } from '@/services/files/shareFile';
 import { buildPagesHtml, buildTextHtml, MAX_TEXT_BYTES } from '@/services/reader/html';
 import { useTheme } from '@/theme';
 
 const PDF_VIEWER = 'file:///android_asset/pdfjs/web/viewer.html';
+const OFFICE_VIEWER = 'file:///android_asset/office/office.html';
 const CODE_EXTENSIONS = new Set(['json', 'xml', 'csv', 'tsv', 'log', 'yaml', 'yml', 'ini', 'toml', 'js', 'ts', 'py', 'java', 'kt', 'c', 'h', 'cpp', 'cs', 'go', 'rs', 'php', 'rb', 'sh', 'sql', 'html', 'htm', 'css']);
 const SAVE_POSITION_DELAY_MS = 800;
 /** Controls hide after this long without interaction (full-screen reading). */
@@ -48,7 +51,8 @@ type ReaderMessage =
   | { type: 'tap' }
   | { type: 'find'; current: number; total: number; pending: boolean }
   | { type: 'outline'; items: { index: number; title: string; depth: number }[] }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  | { type: 'failed'; message: string };
 
 interface ReaderData {
   document: Document;
@@ -60,8 +64,14 @@ interface ReaderData {
 /** Everything the WebView needs, computed once per open (changing it would reload the page). */
 type ReaderSource = { uri: string } | { html: string; baseUrl: string };
 
-async function buildSource(data: ReaderData, startPage: number): Promise<ReaderSource> {
+async function buildSource(data: ReaderData, startPage: number): Promise<ReaderSource | null> {
   const { document, pages, night } = data;
+  if (document.kind === 'other') return null;
+  if (OFFICE_KINDS.includes(document.kind)) {
+    if (!document.fileUri) throw new AppError('not_found', 'File missing');
+    const query = `file=${encodeURIComponent(document.fileUri)}&type=${document.kind}&night=${night ? 1 : 0}`;
+    return { uri: `${OFFICE_VIEWER}?${query}` };
+  }
   if (document.kind === 'pdf') {
     if (!document.fileUri) throw new AppError('not_found', 'PDF file missing');
     // lowmem caps canvas size (~4 MP per page): sharp at phone zoom levels, safe on 1–2 GB phones.
@@ -118,6 +128,7 @@ export default function ReaderScreen() {
   const [sourceError, setSourceError] = useState<AppError | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [crashed, setCrashed] = useState(false);
+  const [renderFailed, setRenderFailed] = useState(false);
   const [page, setPage] = useState(1);
   const [pageCount, setPageCountState] = useState(0);
   const [percent, setPercent] = useState<number | null>(null);
@@ -202,8 +213,8 @@ export default function ReaderScreen() {
 
   const document = data?.document;
   const kind = document?.kind;
-  const paged = kind === 'pdf' || kind === 'pages';
-  const searchable = kind === 'pdf' || kind === 'text';
+  const paged = kind === 'pdf' || kind === 'pages' || kind === 'slides';
+  const searchable = kind === 'pdf' || kind === 'text' || kind === 'word' || kind === 'sheet' || kind === 'slides';
   const bookmarked = (bookmarks.data ?? []).some((b) => b.pageIndex === page - 1);
 
   const onMessage = (event: WebViewMessageEvent) => {
@@ -218,7 +229,7 @@ export default function ReaderScreen() {
         setLoaded(true);
         if (message.pageCount > 0) {
           setPageCountState(message.pageCount);
-          if (document && message.pageCount !== document.pageCount && kind === 'pdf') {
+          if (document && message.pageCount !== document.pageCount && (kind === 'pdf' || kind === 'slides')) {
             setPageCount(db, id, message.pageCount).catch(() => {});
           }
         }
@@ -254,6 +265,11 @@ export default function ReaderScreen() {
       case 'error':
         if (__DEV__) console.warn('Reader error:', message.message);
         break;
+      case 'failed':
+        if (__DEV__) console.warn('Could not render:', message.message);
+        setRenderFailed(true);
+        setLoaded(true);
+        break;
     }
   };
 
@@ -285,6 +301,10 @@ export default function ReaderScreen() {
 
   const share = useAsyncAction(async () => {
     if (document) await shareDocumentFile(document);
+  });
+
+  const openExternally = useAsyncAction(async () => {
+    if (document) await openInAnotherApp(document);
   });
 
   const toggleKeepAwake = useAsyncAction(async () => {
@@ -354,6 +374,9 @@ export default function ReaderScreen() {
           onPress={() => setSheet('bookmarks')}
         />
       ) : null}
+      {document.fileUri ? (
+        <GlassRow icon="open-in-app" label="Open in another app" onPress={() => closeThen(() => openExternally.run())} />
+      ) : null}
       {kind === 'pages' ? <GlassRow icon="file-edit-outline" label="Edit pages" onPress={() => closeThen(() => router.push(`/document/${id}/pages`))} /> : null}
       <GlassRow icon="information-outline" label="Document details" onPress={() => closeThen(() => router.push(`/document/${id}`))} />
     </>
@@ -367,6 +390,31 @@ export default function ReaderScreen() {
   }
   if (data === null) {
     return <>{plainHeader}<EmptyState icon="file-hidden" title="Document not found" actionLabel="Go back" onAction={() => router.back()} /></>;
+  }
+  if (document && (kind === 'other' || renderFailed)) {
+    const extension = fileExtension(document.originalName ?? '').toUpperCase();
+    return (
+      <>
+        {plainHeader}
+        <View className="flex-1 items-center justify-center bg-background px-8">
+          <View className="mb-5 h-20 w-20 items-center justify-center rounded-full bg-surface-muted">
+            <Icon name="file-document-outline" size={40} color="muted" />
+          </View>
+          <Text className="text-center text-lg font-semibold text-text">
+            {renderFailed ? 'This file couldn’t be displayed' : `${extension || 'This'} files open in another app`}
+          </Text>
+          <Text className="mt-2 text-center text-base text-muted">
+            {renderFailed
+              ? 'It may be damaged or use features Docuna can’t show yet. It’s saved in Docuna, and another app may open it.'
+              : 'It’s saved in Docuna with your other documents. Reading it here isn’t supported yet.'}
+          </Text>
+          <View className="mt-8 gap-3 self-stretch">
+            <Button label="Open in another app" icon="open-in-app" size="lg" onPress={() => openExternally.run()} loading={openExternally.pending} />
+            <Button label="Share" icon="share-variant-outline" variant="secondary" onPress={() => share.run()} />
+          </View>
+        </View>
+      </>
+    );
   }
   if (document && kind === 'pages' && data && data.pages.length === 0) {
     return (

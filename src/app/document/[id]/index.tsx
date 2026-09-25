@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { Button } from '@/components/Button';
+import { kindIcon } from '@/components/documentKind';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorView } from '@/components/ErrorView';
 import { Icon } from '@/components/Icon';
@@ -121,7 +122,7 @@ export default function DocumentScreen() {
         </Section>
       ) : (
         <Section title="File" card>
-          <ListRow icon={document.kind === 'pdf' ? 'file-pdf-box' : 'file-document-outline'} title={document.originalName ?? document.title} subtitle={formatBytes(document.sizeBytes)} />
+          <ListRow icon={kindIcon(document.kind)} title={document.originalName ?? document.title} subtitle={formatBytes(document.sizeBytes)} />
         </Section>
       )}
 

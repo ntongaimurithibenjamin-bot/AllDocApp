@@ -3,22 +3,16 @@ import { memo } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import type { Document } from '@/domain/models';
-import { formatRelativeTime, pluralize } from '@/lib/format';
+import { formatRelativeTime } from '@/lib/format';
 import { useTheme } from '@/theme';
 
+import { describeContent, kindIcon } from './documentKind';
 import { Icon } from './Icon';
 
 interface DocumentRowProps {
   document: Document;
   onPress: (document: Document) => void;
   onLongPress?: (document: Document) => void;
-}
-
-/** "12 pages", "PDF" (page count not yet known) or "Text file". */
-function describeContent(document: Document): string {
-  if (document.kind === 'text') return 'Text file';
-  if (document.kind === 'pdf' && document.pageCount === 0) return 'PDF';
-  return pluralize(document.pageCount, 'page');
 }
 
 export const DocumentRow = memo(function DocumentRow({ document, onPress, onLongPress }: DocumentRowProps) {
@@ -38,7 +32,7 @@ export const DocumentRow = memo(function DocumentRow({ document, onPress, onLong
           // Thumbnails are small files on disk; expo-image downsamples and caches them.
           <Image source={{ uri: document.thumbnailUri }} style={{ width: 48, height: 64 }} contentFit="cover" recyclingKey={document.id} />
         ) : (
-          <Icon name={document.kind === 'text' ? 'file-document-outline' : document.kind === 'pdf' ? 'file-pdf-box' : 'file-image-outline'} color="muted" />
+          <Icon name={kindIcon(document.kind)} color="muted" />
         )}
       </View>
       <View className="flex-1">

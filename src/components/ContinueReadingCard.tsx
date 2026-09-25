@@ -4,12 +4,13 @@ import { Pressable, Text, View } from 'react-native';
 import type { Document } from '@/domain/models';
 import { useTheme } from '@/theme';
 
+import { kindIcon } from './documentKind';
 import { Icon } from './Icon';
 
 /** Home card that resumes the last document read, where the reader left off. */
 export function ContinueReadingCard({ document, onPress }: { document: Document; onPress: () => void }) {
   const { colors } = useTheme();
-  const knownPages = document.pageCount > 0 && document.kind !== 'text';
+  const knownPages = document.pageCount > 0 && (document.kind === 'pages' || document.kind === 'pdf' || document.kind === 'slides');
   const page = Math.max(1, Math.min(document.lastReadPage || 1, document.pageCount || 1));
   const progress = knownPages ? page / document.pageCount : 0;
   const status = knownPages ? `Page ${page} of ${document.pageCount}` : 'Pick up where you left off';
@@ -26,7 +27,7 @@ export function ContinueReadingCard({ document, onPress }: { document: Document;
         {document.thumbnailUri ? (
           <Image source={{ uri: document.thumbnailUri }} style={{ width: 60, height: 80 }} contentFit="cover" recyclingKey={document.id} />
         ) : (
-          <Icon name={document.kind === 'pdf' ? 'file-pdf-box' : 'file-document-outline'} color="muted" size={28} />
+          <Icon name={kindIcon(document.kind)} color="muted" size={28} />
         )}
       </View>
       <View className="flex-1">
