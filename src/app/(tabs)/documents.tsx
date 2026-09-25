@@ -1,5 +1,6 @@
 import { FlashList } from '@shopify/flash-list';
-import { router, Stack } from 'expo-router';
+import { router } from 'expo-router';
+import { Tabs } from 'expo-router/js-tabs';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
@@ -103,7 +104,7 @@ export default function DocumentsScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <Stack.Screen
+      <Tabs.Screen
         options={{
           headerRight: () => (
             <Pressable
