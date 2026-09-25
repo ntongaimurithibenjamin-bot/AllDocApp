@@ -1,12 +1,12 @@
-import { Image } from 'expo-image';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Alert, ScrollView, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorView } from '@/components/ErrorView';
 import { Icon } from '@/components/Icon';
 import { ListRow } from '@/components/ListRow';
+import { PageThumb } from '@/components/PageThumb';
 import { PromptDialog } from '@/components/PromptDialog';
 import { Section } from '@/components/Section';
 import {
@@ -19,28 +19,10 @@ import {
 } from '@/db/repositories/documents';
 import { getFolder } from '@/db/repositories/folders';
 import { listPages } from '@/db/repositories/pages';
-import type { Page } from '@/domain/models';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useDb, useDbQuery } from '@/hooks/useDbQuery';
 import { formatRelativeTime, pluralize } from '@/lib/format';
 import { TRASH_RETENTION_DAYS } from '@/services/documents/lifecycle';
-
-function PageThumbnail({ page, index }: { page: Page; index: number }) {
-  return (
-    <View className="w-1/3 p-1.5">
-      <View className="aspect-[3/4] overflow-hidden rounded-lg border border-border bg-surface-muted">
-        <Image
-          source={{ uri: page.thumbnailUri }}
-          style={{ flex: 1, transform: [{ rotate: `${page.rotation}deg` }] }}
-          contentFit="contain"
-          recyclingKey={page.id}
-          accessibilityLabel={`Page ${index + 1}`}
-        />
-      </View>
-      <Text className="mt-1 text-center text-xs text-muted">{index + 1}</Text>
-    </View>
-  );
-}
 
 export default function DocumentScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -110,20 +92,35 @@ export default function DocumentScreen() {
         </Text>
       </View>
 
-      <Section title="Pages">
-        {pages.length > 0 ? (
-          <View className="flex-row flex-wrap px-2.5">
-            {pages.map((page, index) => (
-              <PageThumbnail key={page.id} page={page} index={index} />
-            ))}
-          </View>
-        ) : (
-          <EmptyState
-            icon="file-outline"
-            title="No pages yet"
-            body="Pages you scan into this document will appear here."
-          />
-        )}
+      <Section
+        title="Pages"
+        actionLabel={pages.length > 1 ? 'Arrange' : undefined}
+        onAction={() => router.push(`/document/${id}/pages`)}
+      >
+        <View className="flex-row flex-wrap px-2.5">
+          {pages.map((page, index) => (
+            <Pressable
+              key={page.id}
+              accessibilityRole="button"
+              accessibilityLabel={`Edit page ${index + 1}`}
+              onPress={() => router.push(`/document/${id}/page/${page.id}`)}
+              className="w-1/3 p-1.5"
+            >
+              <PageThumb page={page} index={index} />
+            </Pressable>
+          ))}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Add pages"
+            onPress={() => router.push({ pathname: '/scan', params: { documentId: id } })}
+            className="w-1/3 p-1.5"
+          >
+            <View className="aspect-[3/4] items-center justify-center rounded-lg border border-dashed border-border">
+              <Icon name="plus" size={28} color="muted" />
+              <Text className="mt-1 text-sm text-muted">Add pages</Text>
+            </View>
+          </Pressable>
+        </View>
       </Section>
 
       <Section title="Document" card>

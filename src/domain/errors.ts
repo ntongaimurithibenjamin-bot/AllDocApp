@@ -5,6 +5,9 @@ export type AppErrorCode =
   | 'storage_failure'
   | 'database_failure'
   | 'permission_denied'
+  | 'invalid_image'
+  | 'scanner_unavailable'
+  | 'native_unavailable'
   | 'unknown';
 
 const USER_MESSAGES: Record<AppErrorCode, string> = {
@@ -14,6 +17,9 @@ const USER_MESSAGES: Record<AppErrorCode, string> = {
   storage_failure: 'Docuna could not read or write a file. Please try again.',
   database_failure: 'Something went wrong saving your changes. Please try again.',
   permission_denied: 'Docuna needs permission to do that. You can grant it in Android settings.',
+  invalid_image: 'That image could not be opened. It may be damaged or in an unsupported format.',
+  scanner_unavailable: 'The scanner could not start. Make sure Google Play services is up to date, or add pages from your photos instead.',
+  native_unavailable: 'This feature needs the full Docuna app and is not available in this preview.',
   unknown: 'Something went wrong. Please try again.',
 };
 

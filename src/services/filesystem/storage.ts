@@ -6,7 +6,7 @@ import { toAppError } from '@/domain/errors';
  * App-private file layout. Canonical copies live under documents/ so they survive cache eviction;
  * reader tiles and other derivatives live under cache/ and may be deleted at any time.
  *
- *   <document>/docs/<docId>/pages/<pageId>/{original,processed,thumb}.jpg
+ *   <document>/docs/<docId>/pages/<pageId>/{original,processed,thumb}-<version>.jpg
  *   <document>/docs/<docId>/document.pdf
  *   <cache>/render/<docId>/…
  */
@@ -23,8 +23,27 @@ export function pageDirectory(documentId: string, pageId: string): Directory {
   return new Directory(documentDirectory(documentId), 'pages', pageId);
 }
 
-export function pageFile(documentId: string, pageId: string, kind: PageFileKind): File {
-  return new File(pageDirectory(documentId, pageId), `${kind}.jpg`);
+let versionCounter = 0;
+
+/**
+ * A new, uniquely named file for a page image. Every edit writes a new file instead of
+ * overwriting, so image caches keyed by URI never show a stale version.
+ */
+export function newPageFile(documentId: string, pageId: string, kind: PageFileKind): File {
+  versionCounter = (versionCounter + 1) % 1296;
+  const version = `${Date.now().toString(36)}${versionCounter.toString(36).padStart(2, '0')}`;
+  return new File(pageDirectory(documentId, pageId), `${kind}-${version}.jpg`);
+}
+
+/** Best-effort delete of a single file by URI (used to drop superseded page images). */
+export function deleteFileQuietly(uri: string | null | undefined): void {
+  if (!uri) return;
+  try {
+    const file = new File(uri);
+    if (file.exists) file.delete();
+  } catch (error) {
+    if (__DEV__) console.warn('Could not delete', uri, error);
+  }
 }
 
 export function documentPdfFile(documentId: string): File {

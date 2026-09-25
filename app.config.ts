@@ -30,6 +30,8 @@ const config: ExpoConfig = {
       monochromeImage: './assets/android-icon-monochrome.png',
     },
     predictiveBackGestureEnabled: false,
+    // The overlay permission only serves the development menu.
+    blockedPermissions: variant === 'production' ? ['android.permission.SYSTEM_ALERT_WINDOW'] : [],
   },
   plugins: [
     'expo-router',
@@ -47,6 +49,14 @@ const config: ExpoConfig = {
       },
     ],
     'expo-font',
+    [
+      'expo-image-picker',
+      {
+        // Camera is only used as a fallback on devices without the Google Play scanner.
+        cameraPermission: 'Docuna uses the camera to scan documents.',
+        microphonePermission: false,
+      },
+    ],
   ],
   experiments: {
     typedRoutes: true,

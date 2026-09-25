@@ -179,24 +179,42 @@ export async function deletePages(db: SqlDb, documentId: string, pageIds: readon
   return deleted;
 }
 
-/** Rotates a page clockwise by `quarterTurns` × 90°. */
-export async function rotatePage(db: SqlDb, pageId: string, quarterTurns = 1): Promise<Rotation> {
-  let rotation: Rotation = 0;
+export interface PageRender {
+  originalUri: string;
+  processedUri: string | null;
+  thumbnailUri: string;
+  width: number;
+  height: number;
+  rotation: Rotation;
+  crop: CropQuad | null;
+  filter: PageFilter;
+}
+
+/**
+ * Records a page's new image files and edit state (after crop/rotate/filter/replace). Text
+ * recognition is reset because the image changed.
+ */
+export async function updatePageRender(db: SqlDb, pageId: string, render: PageRender): Promise<void> {
   await db.withExclusiveTransactionAsync(async (txn) => {
-    const row = await txn.getFirstAsync<{ rotation: number; document_id: string }>(
-      'SELECT rotation, document_id FROM pages WHERE id = ?',
-      pageId,
-    );
+    const row = await txn.getFirstAsync<{ document_id: string }>('SELECT document_id FROM pages WHERE id = ?', pageId);
     if (!row) throw new AppError('not_found', `Page ${pageId} not found`);
-    rotation = ((((row.rotation + quarterTurns * 90) % 360) + 360) % 360) as Rotation;
     await txn.runAsync(
-      'UPDATE pages SET rotation = ?, updated_at = ? WHERE id = ?',
-      rotation,
+      `UPDATE pages SET original_uri = ?, processed_uri = ?, thumbnail_uri = ?, width = ?, height = ?,
+         rotation = ?, crop_json = ?, filter = ?, ocr_status = 'pending', updated_at = ?
+       WHERE id = ?`,
+      render.originalUri,
+      render.processedUri,
+      render.thumbnailUri,
+      render.width,
+      render.height,
+      render.rotation,
+      render.crop ? JSON.stringify(render.crop) : null,
+      render.filter,
       Date.now(),
       pageId,
     );
+    await txn.runAsync('DELETE FROM ocr_pages WHERE page_id = ?', pageId);
     await syncDocumentAfterPageChange(txn, row.document_id);
   });
   notifyChanged('pages', 'documents');
-  return rotation;
 }

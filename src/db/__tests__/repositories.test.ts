@@ -160,11 +160,28 @@ describe('pages', () => {
     expect((await documents.getDocument(db, docId))?.pageCount).toBe(2);
   });
 
-  it('rotates clockwise and wraps around', async () => {
-    const id = (await pages.listPages(db, docId))[0]!.id;
-    expect(await pages.rotatePage(db, id)).toBe(90);
-    expect(await pages.rotatePage(db, id, 3)).toBe(0);
-    expect(await pages.rotatePage(db, id, -1)).toBe(270);
+  it('records a new render, resets OCR and refreshes the cover', async () => {
+    const [first] = await pages.listPages(db, docId);
+    await db.runAsync(
+      `INSERT INTO ocr_pages (page_id, document_id, text, engine, processed_at) VALUES (?, ?, 'old text', 'test', 0)`,
+      first!.id,
+      docId,
+    );
+    await pages.updatePageRender(db, first!.id, {
+      originalUri: first!.originalUri,
+      processedUri: 'file:///docs/p1/processed-2.jpg',
+      thumbnailUri: 'file:///docs/p1/thumb-2.jpg',
+      width: 1754,
+      height: 1240,
+      rotation: 90,
+      crop: null,
+      filter: 'bw',
+    });
+
+    const updated = await pages.getPage(db, first!.id);
+    expect(updated).toMatchObject({ rotation: 90, filter: 'bw', width: 1754, ocrStatus: 'pending' });
+    expect(await db.getFirstAsync('SELECT * FROM ocr_pages WHERE page_id = ?', first!.id)).toBeNull();
+    expect((await documents.getDocument(db, docId))?.thumbnailUri).toBe('file:///docs/p1/thumb-2.jpg');
   });
 
   it('rolls back a failed batch insert', async () => {

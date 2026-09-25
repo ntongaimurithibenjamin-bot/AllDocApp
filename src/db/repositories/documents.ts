@@ -139,6 +139,12 @@ export function restoreDocument(db: SqlDb, id: string): Promise<void> {
   return updateDocument(db, id, 'deleted_at = NULL');
 }
 
+/** Deletes a document row immediately (pages cascade). The caller removes its files. */
+export async function deleteDocumentPermanently(db: SqlDb, id: string): Promise<void> {
+  await db.runAsync('DELETE FROM documents WHERE id = ?', id);
+  notifyChanged('documents', 'pages');
+}
+
 export async function listTrashedDocuments(db: SqlDb): Promise<Document[]> {
   const rows = await db.getAllAsync<DocumentRow>(
     'SELECT * FROM documents WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC',

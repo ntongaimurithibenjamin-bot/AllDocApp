@@ -78,7 +78,11 @@ function AppShell() {
         >
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="scan/index" options={{ title: 'Scan', presentation: 'modal' }} />
+          <Stack.Screen name="scan/review" options={{ title: 'Review' }} />
           <Stack.Screen name="document/[id]/index" options={{ title: '' }} />
+          <Stack.Screen name="document/[id]/pages" options={{ title: 'Pages' }} />
+          <Stack.Screen name="document/[id]/page/[pageId]/index" options={{ title: '' }} />
+          <Stack.Screen name="document/[id]/page/[pageId]/crop" options={{ title: 'Crop', presentation: 'fullScreenModal' }} />
           <Stack.Screen name="document/[id]/move" options={{ title: 'Move to folder', presentation: 'modal' }} />
           <Stack.Screen name="folders/[id]" options={{ title: '' }} />
           <Stack.Screen name="inbox" options={{ title: 'Inbox' }} />

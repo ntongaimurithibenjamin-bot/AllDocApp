@@ -1,0 +1,7 @@
+{
+  "name": "docuna-native",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Docuna's on-device scanner and image processing (Android).",
+  "main": "index.ts"
+}

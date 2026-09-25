@@ -1,6 +1,6 @@
 # Docuna — Architecture
 
-Date: 2026-09-25 · Status: **approved; Phase 1 complete, Phase 2 next**
+Date: 2026-09-25 · Status: **approved; Phase 2 in progress**
 
 ## 0. Decisions (2026-09-25)
 
@@ -153,9 +153,9 @@ State management: SQLite is the source of truth. Screens read through repository
 | expo-crypto | ~57.0.3 | `randomUUID` for ids | 1 |
 | expo-status-bar, expo-system-ui, expo-splash-screen, expo-font | SDK 57 | Theming / startup | 1 |
 | expo-dev-client | ~57.0.19 | Dev builds (native module required from Phase 2) | 2 |
-| expo-camera | ~57.0.5 | **Fallback** capture only (non-GMS devices) | 2 |
-| expo-image-manipulator | ~57.0.20 | Import-image resizing/rotation (JS-side simple ops) | 2 |
-| expo-document-picker | ~57.0.2 | Import PDFs / images | 2 |
+| expo-image-picker | ~57.0.20 | Photo import (Android photo picker, multi-select, no storage permission) + system-camera **fallback** on non-GMS devices. Replaces the planned expo-camera + expo-image-manipulator: the native module does resize/rotate/crop | 2 |
+| react-native-svg | 15.15.4 | Crop outline now; annotations in Phase 3 | 2 |
+| expo-document-picker | ~57.0.2 | Import PDFs | 3 |
 | expo-sharing | ~57.0.22 | Share sheet | 3 |
 | expo-intent-launcher | ~57.0.1 | "Open with…" another app | 3 |
 | expo-media-library | ~57.0.5 | Save page images to the gallery | 3 |
@@ -169,7 +169,7 @@ State management: SQLite is the source of truth. Screens read through repository
 | Package | Version | Why | Native? | Phase |
 |---|---|---|---|---|
 | @shopify/flash-list | 2.3.2 | Virtualised lists and reader pages (low-end devices) | JS only (v2) | 1 |
-| react-native-reorderable-list | 0.18.1 | Page drag-reorder on Reanimated 4 (maintained Jul 2026; `draggable-flatlist` stale since 2025) | JS only | 2 |
+| react-native-sortables | 1.10.0 | Drag-reorder in a **grid** of pages on Reanimated 4 (reorderable-list only supports single-column lists) | JS only | 2 |
 | react-native-google-mobile-ads | 17.2.0 | AdMob banner / interstitial / rewarded + UMP consent; peer `react-native >=0.86` fits SDK 57 exactly | Yes + config plugin | 6 |
 | expo-iap | 5.6.3 | Google Play Billing (OpenIAP), Expo config plugin | Yes + config plugin | 7 |
 

@@ -33,7 +33,7 @@ export interface FolderWithCount extends Folder {
   documentCount: number;
 }
 
-export type PageFilter = 'original' | 'color' | 'grayscale' | 'bw' | 'enhanced';
+export type PageFilter = 'original' | 'enhanced' | 'grayscale' | 'bw';
 export type Rotation = 0 | 90 | 180 | 270;
 export type OcrStatus = 'pending' | 'done' | 'failed' | 'skipped';
 
