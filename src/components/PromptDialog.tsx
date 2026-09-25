@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Modal, Pressable, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Pressable, Text, TextInput, View, type KeyboardTypeOptions } from 'react-native';
 
 import { useTheme } from '@/theme';
 
@@ -11,6 +11,7 @@ interface PromptDialogProps {
   initialValue?: string;
   placeholder?: string;
   confirmLabel?: string;
+  keyboardType?: KeyboardTypeOptions;
   onConfirm: (value: string) => void;
   onCancel: () => void;
 }
@@ -30,6 +31,7 @@ function PromptBody({
   initialValue = '',
   placeholder,
   confirmLabel = 'Save',
+  keyboardType,
   onConfirm,
   onCancel,
 }: Omit<PromptDialogProps, 'visible'>) {
@@ -58,6 +60,7 @@ function PromptBody({
             returnKeyType="done"
             onSubmitEditing={confirm}
             maxLength={120}
+            keyboardType={keyboardType}
             className="rounded-xl border border-border bg-background px-4 py-3 text-base text-text"
           />
           <View className="mt-5 flex-row justify-end gap-2">
