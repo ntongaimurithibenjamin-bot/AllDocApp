@@ -9,6 +9,7 @@ const DEFAULTS = {
   /** SAF directory URI where saved PDFs are mirrored; null = off. */
   autoExportDirectoryUri: null as string | null,
   analyticsEnabled: true,
+  readerNightMode: false,
 };
 
 export type Settings = typeof DEFAULTS;

@@ -46,6 +46,27 @@ export function deleteFileQuietly(uri: string | null | undefined): void {
   }
 }
 
+/** The stored original of an imported file document, e.g. source.pdf. */
+export function documentSourceFile(documentId: string, extension: string): File {
+  return new File(documentDirectory(documentId), `source.${extension}`);
+}
+
+/** A uniquely named document-level image (e.g. a PDF cover thumbnail). */
+export function newDocumentImageFile(documentId: string, kind: 'thumb'): File {
+  versionCounter = (versionCounter + 1) % 1296;
+  return new File(documentDirectory(documentId), `${kind}-${Date.now().toString(36)}${versionCounter.toString(36)}.jpg`);
+}
+
+export function ensureDocumentDirectory(documentId: string): Directory {
+  try {
+    const dir = documentDirectory(documentId);
+    dir.create({ intermediates: true, idempotent: true });
+    return dir;
+  } catch (error) {
+    throw toAppError(error, 'storage_failure');
+  }
+}
+
 export function documentPdfFile(documentId: string): File {
   return new File(documentDirectory(documentId), 'document.pdf');
 }

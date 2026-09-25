@@ -218,15 +218,17 @@ CREATE INDEX idx_bookmarks_doc ON bookmarks(document_id, page_index);
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;
 
-/** Brings the database to the latest schema. Safe to call on every app start. */
-export async function migrate(db: SqlDb): Promise<void> {
+/**
+ * Brings the database to the latest schema (or `upTo`, for tests). Safe to call on every start.
+ */
+export async function migrate(db: SqlDb, upTo: number = LATEST_SCHEMA_VERSION): Promise<void> {
   await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
 
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   const current = row?.user_version ?? 0;
 
   for (const migration of MIGRATIONS) {
-    if (migration.version <= current) continue;
+    if (migration.version <= current || migration.version > upTo) continue;
     // PRAGMA foreign_keys is a no-op inside a transaction, so toggle it around it.
     if (migration.rebuildsTables) await db.execAsync('PRAGMA foreign_keys = OFF;');
     try {

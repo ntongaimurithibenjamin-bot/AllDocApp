@@ -8,6 +8,7 @@ export type AppErrorCode =
   | 'invalid_image'
   | 'scanner_unavailable'
   | 'native_unavailable'
+  | 'unsupported_file'
   | 'unknown';
 
 const USER_MESSAGES: Record<AppErrorCode, string> = {
@@ -20,6 +21,7 @@ const USER_MESSAGES: Record<AppErrorCode, string> = {
   invalid_image: 'That image could not be opened. It may be damaged or in an unsupported format.',
   scanner_unavailable: 'The scanner could not start. Make sure Google Play services is up to date, or add pages from your photos instead.',
   native_unavailable: 'This feature needs the full Docuna app and is not available in this preview.',
+  unsupported_file: 'Docuna can’t open this type of file yet.',
   unknown: 'Something went wrong. Please try again.',
 };
 
