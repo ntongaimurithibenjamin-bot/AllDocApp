@@ -1,13 +1,13 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router } from 'expo-router';
 import { Tabs } from 'expo-router/js-tabs';
-import { View } from 'react-native';
+import { View, type ColorValue } from 'react-native';
 
 import { Icon, type IconName } from '@/components/Icon';
 import { useTheme } from '@/theme';
 
 function tabIcon(name: IconName, focusedName: IconName) {
-  return function TabIcon({ color, focused }: { color: string; focused: boolean }) {
+  return function TabIcon({ color, focused }: { color: ColorValue; focused: boolean }) {
     return <MaterialCommunityIcons name={focused ? focusedName : name} size={24} color={color} />;
   };
 }
