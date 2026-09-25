@@ -1,10 +1,23 @@
-export type DocumentSource = 'scan' | 'import_pdf' | 'import_image';
+export type DocumentSource = 'scan' | 'import_pdf' | 'import_image' | 'import_file';
+
+/**
+ * How a document's content is stored: 'pages' = page images (scans, photos); 'pdf' / 'text' = a
+ * single imported file read as-is.
+ */
+export type DocumentKind = 'pages' | 'pdf' | 'text';
 
 export interface Document {
   id: string;
   title: string;
   folderId: string | null;
   source: DocumentSource;
+  kind: DocumentKind;
+  /** The stored file for 'pdf' / 'text' documents. */
+  fileUri: string | null;
+  mimeType: string | null;
+  /** File name as imported, e.g. "Lease.pdf". */
+  originalName: string | null;
+  /** 0 when unknown (e.g. a password-protected PDF before it is opened). */
   pageCount: number;
   thumbnailUri: string | null;
   pdfUri: string | null;
@@ -14,9 +27,20 @@ export interface Document {
   isFavorite: boolean;
   isArchived: boolean;
   inInbox: boolean;
+  /** 1-based page the reader was last on (0 = never opened). */
+  lastReadPage: number;
   createdAt: number;
   updatedAt: number;
   deletedAt: number | null;
+}
+
+export interface Bookmark {
+  id: string;
+  documentId: string;
+  /** 0-based page number. */
+  pageIndex: number;
+  label: string | null;
+  createdAt: number;
 }
 
 export interface Folder {

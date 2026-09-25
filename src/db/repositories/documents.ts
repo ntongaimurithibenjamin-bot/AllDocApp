@@ -1,5 +1,5 @@
 import { AppError } from '@/domain/errors';
-import type { Document, DocumentQuery, DocumentSource } from '@/domain/models';
+import type { Document, DocumentKind, DocumentQuery, DocumentSource } from '@/domain/models';
 import { normalizeName } from '@/domain/validation';
 import { newId } from '@/lib/id';
 
@@ -11,6 +11,10 @@ interface DocumentRow {
   title: string;
   folder_id: string | null;
   source: DocumentSource;
+  kind: DocumentKind;
+  file_uri: string | null;
+  mime_type: string | null;
+  original_name: string | null;
   page_count: number;
   thumbnail_uri: string | null;
   pdf_uri: string | null;
@@ -19,6 +23,7 @@ interface DocumentRow {
   is_favorite: number;
   is_archived: number;
   in_inbox: number;
+  last_read_page: number;
   created_at: number;
   updated_at: number;
   deleted_at: number | null;
@@ -30,6 +35,10 @@ function toDocument(row: DocumentRow): Document {
     title: row.title,
     folderId: row.folder_id,
     source: row.source,
+    kind: row.kind,
+    fileUri: row.file_uri,
+    mimeType: row.mime_type,
+    originalName: row.original_name,
     pageCount: row.page_count,
     thumbnailUri: row.thumbnail_uri,
     pdfUri: row.pdf_uri,
@@ -38,6 +47,7 @@ function toDocument(row: DocumentRow): Document {
     isFavorite: row.is_favorite === 1,
     isArchived: row.is_archived === 1,
     inInbox: row.in_inbox === 1,
+    lastReadPage: row.last_read_page,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
@@ -76,19 +86,45 @@ export async function getDocument(db: SqlDb, id: string): Promise<Document | nul
   return row ? toDocument(row) : null;
 }
 
+export interface FileDocumentInput {
+  kind: Exclude<DocumentKind, 'pages'>;
+  fileUri: string;
+  mimeType: string | null;
+  originalName: string | null;
+  sizeBytes: number;
+  pageCount?: number;
+  thumbnailUri?: string | null;
+}
+
 export async function createDocument(
   db: SqlDb,
-  input: { title: string; source: DocumentSource; folderId?: string | null; id?: string },
+  input: {
+    title: string;
+    source: DocumentSource;
+    folderId?: string | null;
+    id?: string;
+    /** For imported PDFs / text files; omitted for page-image documents. */
+    file?: FileDocumentInput;
+  },
 ): Promise<Document> {
   const now = Date.now();
   const id = input.id ?? newId();
+  const file = input.file;
   await db.runAsync(
-    `INSERT INTO documents (id, title, folder_id, source, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO documents (id, title, folder_id, source, kind, file_uri, mime_type, original_name,
+                            size_bytes, page_count, thumbnail_uri, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
     normalizeName(input.title),
     input.folderId ?? null,
     input.source,
+    file?.kind ?? 'pages',
+    file?.fileUri ?? null,
+    file?.mimeType ?? null,
+    file?.originalName ?? null,
+    file?.sizeBytes ?? 0,
+    file?.pageCount ?? 0,
+    file?.thumbnailUri ?? null,
     now,
     now,
   );
@@ -124,6 +160,25 @@ export function setFavorite(db: SqlDb, id: string, isFavorite: boolean): Promise
 
 export function setArchived(db: SqlDb, id: string, isArchived: boolean): Promise<void> {
   return updateDocument(db, id, 'is_archived = ?, in_inbox = 0', isArchived ? 1 : 0);
+}
+
+/**
+ * Remembers where the reader is. Doesn't touch updated_at: reading isn't editing, and lists sort by
+ * last modified.
+ */
+export async function setLastReadPage(db: SqlDb, id: string, page: number): Promise<void> {
+  await db.runAsync('UPDATE documents SET last_read_page = ? WHERE id = ?', Math.max(0, Math.floor(page)), id);
+}
+
+/** The reader learns a PDF's page count on open (e.g. password-protected files import with 0). */
+export async function setPageCount(db: SqlDb, id: string, pageCount: number): Promise<void> {
+  const result = await db.runAsync(
+    'UPDATE documents SET page_count = ? WHERE id = ? AND page_count != ?',
+    pageCount,
+    id,
+    pageCount,
+  );
+  if (result.changes > 0) notifyChanged('documents');
 }
 
 export function markFiled(db: SqlDb, id: string): Promise<void> {
