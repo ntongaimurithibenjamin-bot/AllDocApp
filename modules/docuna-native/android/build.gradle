@@ -3,11 +3,11 @@ plugins {
   id 'expo-module-gradle-plugin'
 }
 
-group = 'com.varietytech.docuna.nativemodule'
+group = 'com.variety_tech.docuna.nativemodule'
 version = '0.1.0'
 
 android {
-  namespace "com.varietytech.docuna.nativemodule"
+  namespace "com.variety_tech.docuna.nativemodule"
   defaultConfig {
     versionCode 1
     versionName "0.1.0"

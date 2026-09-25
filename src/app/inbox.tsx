@@ -8,10 +8,12 @@ import { ErrorView } from '@/components/ErrorView';
 import { listDocuments } from '@/db/repositories/documents';
 import type { Document } from '@/domain/models';
 import { useDbQuery } from '@/hooks/useDbQuery';
+import { useDocumentActions } from '@/hooks/useDocumentActions';
 
-const openDocument = (document: Document) => router.push(`/document/${document.id}`);
+const openDocument = (document: Document) => router.push(`/document/${document.id}/read`);
 
 export default function InboxScreen() {
+  const { openActions } = useDocumentActions();
   const { data, error, refresh } = useDbQuery((db) => listDocuments(db, { inboxOnly: true }), [], ['documents']);
 
   if (error) return <ErrorView error={error} onRetry={refresh} />;
@@ -21,7 +23,7 @@ export default function InboxScreen() {
       <FlashList
         data={data ?? []}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <DocumentRow document={item} onPress={openDocument} />}
+        renderItem={({ item }) => <DocumentRow document={item} onPress={openDocument} onLongPress={openActions} />}
         ListHeaderComponent={
           <Text className="px-4 pb-2 pt-4 text-sm text-muted">
             New scans wait here until you move them into a folder or mark them as filed.

@@ -30,6 +30,16 @@ describe('reader HTML', () => {
     expect(JSON.parse(json)).toBe(text);
   });
 
+  it('generates inline scripts that are valid JavaScript', () => {
+    const scripts = (html: string) =>
+      [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1]!);
+    const pages = buildPagesHtml([{ uri: 'file:///a.jpg', width: 1, height: 1 }], { night: false, startPage: 1 });
+    const text = buildTextHtml('hello', { night: false, truncated: false, monospace: false });
+    for (const script of [...scripts(pages), ...scripts(text)]) {
+      expect(() => new Function(script)).not.toThrow();
+    }
+  });
+
   it('escapes attribute values in page URIs', () => {
     const html = buildPagesHtml([{ uri: 'file:///x"onerror="alert(1).jpg', width: 1, height: 1 }], { night: false, startPage: 1 });
     expect(html).not.toContain('"onerror="');

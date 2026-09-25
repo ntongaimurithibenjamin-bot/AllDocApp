@@ -46,7 +46,7 @@ export default function ScanReviewScreen() {
     const name = (title ?? data.document.title).trim();
     if (name && name !== data.document.title) await renameDocument(db, documentId, name);
     if (folderId) await moveDocument(db, documentId, folderId);
-    router.replace(`/document/${documentId}`);
+    router.replace(`/document/${documentId}/read`);
   });
 
   const discard = useAsyncAction(async () => {

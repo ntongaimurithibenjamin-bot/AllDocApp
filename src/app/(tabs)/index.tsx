@@ -4,6 +4,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/Button';
+import { ContinueReadingCard } from '@/components/ContinueReadingCard';
 import { DocumentRow } from '@/components/DocumentRow';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorView } from '@/components/ErrorView';
@@ -11,10 +12,12 @@ import { Icon } from '@/components/Icon';
 import { ListRow } from '@/components/ListRow';
 import { NewFolderDialog } from '@/components/NewFolderDialog';
 import { Section } from '@/components/Section';
-import { listDocuments } from '@/db/repositories/documents';
+import { getContinueReading, listDocuments } from '@/db/repositories/documents';
 import { listFolders } from '@/db/repositories/folders';
 import type { Document } from '@/domain/models';
 import { useDbQuery } from '@/hooks/useDbQuery';
+import { useDocumentActions } from '@/hooks/useDocumentActions';
+import { useImportFile } from '@/hooks/useImportFile';
 import { formatBytes, greeting, pluralize } from '@/lib/format';
 import { getStorageUsage } from '@/services/filesystem/storage';
 import { useTheme } from '@/theme';
@@ -23,19 +26,22 @@ const INBOX_PREVIEW = 3;
 const RECENT_LIMIT = 5;
 
 async function loadHome(db: Parameters<typeof listDocuments>[0]) {
-  const [inbox, recent, folders] = await Promise.all([
+  const [inbox, recent, folders, continueReading] = await Promise.all([
     listDocuments(db, { inboxOnly: true, limit: INBOX_PREVIEW + 1 }),
     listDocuments(db, { limit: RECENT_LIMIT }),
     listFolders(db),
+    getContinueReading(db),
   ]);
-  return { inbox, recent, folders, storage: getStorageUsage() };
+  return { inbox, recent, folders, continueReading, storage: getStorageUsage() };
 }
 
-const openDocument = (document: Document) => router.push(`/document/${document.id}`);
+const openDocument = (document: Document) => router.push(`/document/${document.id}/read`);
 
 export default function HomeScreen() {
+  const { openActions } = useDocumentActions();
   const { colors } = useTheme();
   const [newFolderVisible, setNewFolderVisible] = useState(false);
+  const importFile = useImportFile();
   const { data, error, refresh } = useDbQuery(loadHome, [], ['documents', 'folders']);
 
   return (
@@ -61,7 +67,19 @@ export default function HomeScreen() {
 
         <View className="mx-4 mt-4">
           <Button label="Scan document" icon="scan-helper" size="lg" onPress={() => router.push('/scan')} />
+          <Button
+            label="Open a file"
+            icon="file-import-outline"
+            variant="secondary"
+            onPress={() => importFile.run()}
+            loading={importFile.pending}
+            className="mt-3"
+          />
         </View>
+
+        {data?.continueReading ? (
+          <ContinueReadingCard document={data.continueReading} onPress={() => openDocument(data.continueReading!)} />
+        ) : null}
 
         {error ? <ErrorView error={error} onRetry={refresh} /> : null}
 
@@ -73,7 +91,7 @@ export default function HomeScreen() {
             card
           >
             {data.inbox.slice(0, INBOX_PREVIEW).map((document) => (
-              <DocumentRow key={document.id} document={document} onPress={openDocument} />
+              <DocumentRow key={document.id} document={document} onPress={openDocument} onLongPress={openActions} />
             ))}
           </Section>
         ) : null}
@@ -82,7 +100,7 @@ export default function HomeScreen() {
           <Section title="Recent" actionLabel="All documents" onAction={() => router.push('/documents')} card>
             {data.recent.length > 0 ? (
               data.recent.map((document) => (
-                <DocumentRow key={document.id} document={document} onPress={openDocument} />
+                <DocumentRow key={document.id} document={document} onPress={openDocument} onLongPress={openActions} />
               ))
             ) : (
               <EmptyState

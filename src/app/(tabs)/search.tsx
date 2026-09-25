@@ -45,7 +45,12 @@ function SearchResult({ hit }: { hit: SearchHit }) {
   return (
     <Pressable
       accessibilityRole="button"
-      onPress={() => router.push(`/document/${hit.documentId}`)}
+      onPress={() =>
+        router.push({
+          pathname: '/document/[id]/read',
+          params: hit.pageNumber ? { id: hit.documentId, page: String(hit.pageNumber) } : { id: hit.documentId },
+        })
+      }
       android_ripple={{ color: colors.border }}
       className="flex-row gap-4 px-4 py-3"
     >

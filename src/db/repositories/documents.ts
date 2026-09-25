@@ -24,6 +24,7 @@ interface DocumentRow {
   is_archived: number;
   in_inbox: number;
   last_read_page: number;
+  last_opened_at: number | null;
   created_at: number;
   updated_at: number;
   deleted_at: number | null;
@@ -48,6 +49,7 @@ function toDocument(row: DocumentRow): Document {
     isArchived: row.is_archived === 1,
     inInbox: row.in_inbox === 1,
     lastReadPage: row.last_read_page,
+    lastOpenedAt: row.last_opened_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
@@ -105,6 +107,11 @@ export async function createDocument(
     id?: string;
     /** For imported PDFs / text files; omitted for page-image documents. */
     file?: FileDocumentInput;
+    /**
+     * Whether it lands in the inbox ("Recently scanned") for filing. Defaults to true only for
+     * scans; files opened from the phone are not "scanned".
+     */
+    inInbox?: boolean;
   },
 ): Promise<Document> {
   const now = Date.now();
@@ -112,8 +119,8 @@ export async function createDocument(
   const file = input.file;
   await db.runAsync(
     `INSERT INTO documents (id, title, folder_id, source, kind, file_uri, mime_type, original_name,
-                            size_bytes, page_count, thumbnail_uri, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                            size_bytes, page_count, thumbnail_uri, in_inbox, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
     normalizeName(input.title),
     input.folderId ?? null,
@@ -125,6 +132,7 @@ export async function createDocument(
     file?.sizeBytes ?? 0,
     file?.pageCount ?? 0,
     file?.thumbnailUri ?? null,
+    (input.inInbox ?? input.source === 'scan') ? 1 : 0,
     now,
     now,
   );
@@ -170,6 +178,22 @@ export async function setLastReadPage(db: SqlDb, id: string, page: number): Prom
   await db.runAsync('UPDATE documents SET last_read_page = ? WHERE id = ?', Math.max(0, Math.floor(page)), id);
 }
 
+/** Records that the reader opened the document (drives "Continue reading"). */
+export async function markOpened(db: SqlDb, id: string): Promise<void> {
+  await db.runAsync('UPDATE documents SET last_opened_at = ? WHERE id = ?', Date.now(), id);
+  notifyChanged('documents');
+}
+
+/** The most recently read document, if any (not trashed or archived). */
+export async function getContinueReading(db: SqlDb): Promise<Document | null> {
+  const row = await db.getFirstAsync<DocumentRow>(
+    `SELECT * FROM documents
+     WHERE last_opened_at IS NOT NULL AND deleted_at IS NULL AND is_archived = 0
+     ORDER BY last_opened_at DESC LIMIT 1`,
+  );
+  return row ? toDocument(row) : null;
+}
+
 /** The reader learns a PDF's page count on open (e.g. password-protected files import with 0). */
 export async function setPageCount(db: SqlDb, id: string, pageCount: number): Promise<void> {
   const result = await db.runAsync(
@@ -179,6 +203,12 @@ export async function setPageCount(db: SqlDb, id: string, pageCount: number): Pr
     pageCount,
   );
   if (result.changes > 0) notifyChanged('documents');
+}
+
+/** Sets a file document's cover thumbnail (and page count, if it was unknown). */
+export async function setDocumentCover(db: SqlDb, id: string, thumbnailUri: string, pageCount: number): Promise<void> {
+  await db.runAsync('UPDATE documents SET thumbnail_uri = ?, page_count = ? WHERE id = ?', thumbnailUri, pageCount, id);
+  notifyChanged('documents');
 }
 
 export function markFiled(db: SqlDb, id: string): Promise<void> {

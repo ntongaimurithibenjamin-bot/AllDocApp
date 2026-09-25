@@ -13,10 +13,12 @@ import { deleteFolder, getFolder, renameFolder } from '@/db/repositories/folders
 import type { Document } from '@/domain/models';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useDb, useDbQuery } from '@/hooks/useDbQuery';
+import { useDocumentActions } from '@/hooks/useDocumentActions';
 
-const openDocument = (document: Document) => router.push(`/document/${document.id}`);
+const openDocument = (document: Document) => router.push(`/document/${document.id}/read`);
 
 export default function FolderScreen() {
+  const { openActions } = useDocumentActions();
   const { id } = useLocalSearchParams<{ id: string }>();
   const db = useDb();
   const [renameVisible, setRenameVisible] = useState(false);
@@ -74,7 +76,7 @@ export default function FolderScreen() {
       <FlashList
         data={documents}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <DocumentRow document={item} onPress={openDocument} />}
+        renderItem={({ item }) => <DocumentRow document={item} onPress={openDocument} onLongPress={openActions} />}
         ListEmptyComponent={
           <EmptyState
             icon="folder-open-outline"

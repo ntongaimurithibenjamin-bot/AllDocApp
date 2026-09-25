@@ -1,10 +1,15 @@
 export type DocumentSource = 'scan' | 'import_pdf' | 'import_image' | 'import_file';
 
 /**
- * How a document's content is stored: 'pages' = page images (scans, photos); 'pdf' / 'text' = a
- * single imported file read as-is.
+ * How a document's content is stored and read:
+ *  - 'pages': page images (scans, photos)
+ *  - 'pdf' | 'text' | 'word' | 'sheet' | 'slides': one imported file, rendered on the device
+ *  - 'other': kept in Docuna but opened with another app (e.g. legacy .doc, .epub)
  */
-export type DocumentKind = 'pages' | 'pdf' | 'text';
+export type DocumentKind = 'pages' | 'pdf' | 'text' | 'word' | 'sheet' | 'slides' | 'other';
+
+/** Kinds rendered by the office reader (Word / spreadsheets / PowerPoint). */
+export const OFFICE_KINDS: readonly DocumentKind[] = ['word', 'sheet', 'slides'];
 
 export interface Document {
   id: string;
@@ -29,6 +34,8 @@ export interface Document {
   inInbox: boolean;
   /** 1-based page the reader was last on (0 = never opened). */
   lastReadPage: number;
+  /** When the document was last opened in the reader. */
+  lastOpenedAt: number | null;
   createdAt: number;
   updatedAt: number;
   deletedAt: number | null;

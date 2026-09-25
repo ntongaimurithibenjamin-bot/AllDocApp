@@ -74,9 +74,9 @@ export async function importImagesIntoDocument(
 export async function createDocumentFromImages(
   db: SqlDb,
   sourceUris: readonly string[],
-  input: { title: string; source: DocumentSource; onProgress?: ProgressCallback },
+  input: { title: string; source: DocumentSource; inInbox?: boolean; onProgress?: ProgressCallback },
 ): Promise<Document> {
-  const document = await createDocument(db, { title: input.title, source: input.source });
+  const document = await createDocument(db, { title: input.title, source: input.source, inInbox: input.inInbox });
   try {
     await importImagesIntoDocument(db, document.id, sourceUris, { onProgress: input.onProgress });
     return document;

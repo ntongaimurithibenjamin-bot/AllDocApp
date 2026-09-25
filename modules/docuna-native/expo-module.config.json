@@ -1,6 +1,6 @@
 {
   "platforms": ["android"],
   "android": {
-    "modules": ["com.varietytech.docuna.nativemodule.DocunaNativeModule"]
+    "modules": ["com.variety_tech.docuna.nativemodule.DocunaNativeModule"]
   }
 }

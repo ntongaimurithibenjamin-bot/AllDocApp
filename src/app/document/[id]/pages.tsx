@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useCallback } from 'react';
 import { Pressable, Text, View } from 'react-native';
@@ -63,7 +64,11 @@ export default function PagesScreen() {
             keyExtractor={(page) => page.id}
             renderItem={renderItem}
             scrollableRef={scrollableRef}
+            onDragStart={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+            }}
             onDragEnd={({ data: ordered }) => {
+              Haptics.selectionAsync().catch(() => {});
               if (ordered.some((page, i) => page.id !== pages[i]?.id)) reorder.run(ordered);
             }}
           />

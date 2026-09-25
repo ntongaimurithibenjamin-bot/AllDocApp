@@ -1,10 +1,11 @@
+import { DocunaNative } from 'docuna-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
 
 import { createDocument } from '@/db/repositories/documents';
 import type { SqlDb } from '@/db/types';
 import { AppError, toAppError } from '@/domain/errors';
-import { classifyImport, fileExtension, titleFromFileName } from '@/domain/fileTypes';
+import { classifyImport, defaultExtension, fileExtension, titleFromFileName } from '@/domain/fileTypes';
 import type { Document } from '@/domain/models';
 import { newId } from '@/lib/id';
 import { createDocumentFromImages, discardDocument } from '@/services/pages/pageService';
@@ -15,6 +16,19 @@ import {
   ensureDocumentDirectory,
   newDocumentImageFile,
 } from '@/services/filesystem/storage';
+
+/**
+ * Copies an incoming file into app storage. Files from other apps arrive as content:// URIs with a
+ * temporary read grant, which the native module reads via the ContentResolver.
+ */
+async function copyIntoStorage(sourceUri: string, target: File): Promise<void> {
+  if (sourceUri.startsWith('content://')) {
+    if (!DocunaNative) throw new AppError('native_unavailable');
+    await DocunaNative.copyContentAsync(sourceUri, target.uri);
+  } else {
+    new File(sourceUri).copy(target);
+  }
+}
 
 /** Keep this much free space after an import so the phone (and Docuna) keep working. */
 const STORAGE_HEADROOM_BYTES = 50 * 1024 * 1024;
@@ -45,15 +59,9 @@ export async function importFile(db: SqlDb, file: IncomingFile): Promise<Documen
   const kind = classifyImport(file.name, file.mimeType);
   const title = titleFromFileName(file.name);
 
-  if (kind === 'office') {
-    const ext = fileExtension(file.name).toUpperCase();
-    throw new AppError('unsupported_file', `Office file: ${file.name}`, {
-      userMessage: `Docuna can’t open ${ext} files yet. Word, Excel and PowerPoint support is coming next.`,
-    });
-  }
   if (kind === 'unsupported') {
     throw new AppError('unsupported_file', `Unsupported file: ${file.name}`, {
-      userMessage: `Docuna can’t open “${file.name}”. Supported: PDF, images and text files.`,
+      userMessage: `Docuna can’t open “${file.name}”. It supports PDFs, Word, Excel, PowerPoint, text files and images.`,
     });
   }
   if (file.size !== null && file.size > Paths.availableDiskSpace - STORAGE_HEADROOM_BYTES) {
@@ -64,13 +72,13 @@ export async function importFile(db: SqlDb, file: IncomingFile): Promise<Documen
     return createDocumentFromImages(db, [file.uri], { title, source: 'import_image' });
   }
 
-  // PDF or text: keep the original file, byte for byte.
+  // Everything else keeps the original file, byte for byte.
   const id = newId();
   ensureDocumentDirectory(id);
   try {
-    const extension = fileExtension(file.name) || (kind === 'pdf' ? 'pdf' : 'txt');
+    const extension = fileExtension(file.name) || defaultExtension(kind, file.mimeType);
     const stored = documentSourceFile(id, extension);
-    new File(file.uri).copy(stored);
+    await copyIntoStorage(file.uri, stored);
     const sizeBytes = stored.size ?? file.size ?? 0;
 
     let pageCount = 0;

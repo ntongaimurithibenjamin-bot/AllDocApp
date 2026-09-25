@@ -14,6 +14,8 @@ import { listDocuments } from '@/db/repositories/documents';
 import { listFolders } from '@/db/repositories/folders';
 import type { Document, DocumentSort } from '@/domain/models';
 import { useDbQuery } from '@/hooks/useDbQuery';
+import { useDocumentActions } from '@/hooks/useDocumentActions';
+import { useImportFile } from '@/hooks/useImportFile';
 import { pluralize } from '@/lib/format';
 
 type Filter = 'all' | 'favorites' | 'archived';
@@ -30,12 +32,14 @@ const SORTS: { key: DocumentSort; label: string }[] = [
   { key: 'title', label: 'Name' },
 ];
 
-const openDocument = (document: Document) => router.push(`/document/${document.id}`);
+const openDocument = (document: Document) => router.push(`/document/${document.id}/read`);
 
 export default function DocumentsScreen() {
+  const { openActions } = useDocumentActions();
   const [filter, setFilter] = useState<Filter>('all');
   const [sortIndex, setSortIndex] = useState(0);
   const [newFolderVisible, setNewFolderVisible] = useState(false);
+  const importFile = useImportFile();
   const sort = SORTS[sortIndex]!;
 
   const folders = useDbQuery((db) => listFolders(db), [], ['folders', 'documents']);
@@ -107,15 +111,14 @@ export default function DocumentsScreen() {
       <Tabs.Screen
         options={{
           headerRight: () => (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="New folder"
-              hitSlop={12}
-              onPress={() => setNewFolderVisible(true)}
-              className="mr-4"
-            >
-              <Icon name="folder-plus-outline" />
-            </Pressable>
+            <View className="mr-4 flex-row gap-5">
+              <Pressable accessibilityRole="button" accessibilityLabel="Open a file" hitSlop={12} onPress={() => importFile.run()}>
+                <Icon name="file-import-outline" />
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="New folder" hitSlop={12} onPress={() => setNewFolderVisible(true)}>
+                <Icon name="folder-plus-outline" />
+              </Pressable>
+            </View>
           ),
         }}
       />
@@ -131,7 +134,7 @@ export default function DocumentsScreen() {
         <FlashList
           data={documents.data ?? []}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <DocumentRow document={item} onPress={openDocument} />}
+          renderItem={({ item }) => <DocumentRow document={item} onPress={openDocument} onLongPress={openActions} />}
           ListHeaderComponent={header}
           ListEmptyComponent={
             documents.loading ? null : (

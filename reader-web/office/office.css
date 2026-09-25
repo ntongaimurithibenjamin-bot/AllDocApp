@@ -1,0 +1,51 @@
+html, body { margin: 0; padding: 0; -webkit-text-size-adjust: 100%; }
+body { background: #e9ecef; color: #111827; font-family: sans-serif; }
+.night body { background: #111418; color: #d7dde5; }
+
+#status { padding: 48px 24px; text-align: center; color: #5b6573; font-size: 15px; }
+.night #status { color: #9aa4b2; }
+#notice { margin: 0; padding: 10px 16px; background: #fff4d6; color: #5c4400; font-size: 14px; }
+.night #notice { background: #3a3013; color: #f2dca0; }
+
+mark { background: #ffe066; color: inherit; border-radius: 2px; }
+mark.current { background: #ff9f1c; }
+.night mark { background: #7a6400; }
+.night mark.current { background: #c46b00; }
+
+/* Word */
+.doc { margin: 8px; padding: 20px 18px 80px; background: #fff; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,.2);
+  font-family: serif; font-size: 16px; line-height: 1.55; overflow-wrap: break-word; }
+.night .doc { background: #1a1f26; }
+.doc img { max-width: 100%; height: auto; }
+.doc table { border-collapse: collapse; margin: 12px 0; max-width: 100%; display: block; overflow-x: auto; }
+.doc td, .doc th { border: 1px solid #c9cfd6; padding: 4px 8px; vertical-align: top; }
+.night .doc td, .night .doc th { border-color: #3a434f; }
+.doc h1, .doc h2, .doc h3 { font-family: sans-serif; line-height: 1.25; }
+
+/* Excel */
+#tabs { position: sticky; top: 0; z-index: 2; display: flex; gap: 6px; overflow-x: auto; padding: 8px; background: #dfe3e8; }
+.night #tabs { background: #1a1f26; }
+#tabs button { flex: none; border: 0; border-radius: 16px; padding: 7px 14px; font-size: 14px; background: #fff; color: #111827; }
+#tabs button[aria-selected="true"] { background: #2f54eb; color: #fff; }
+.night #tabs button { background: #2a323d; color: #e8ecf1; }
+.night #tabs button[aria-selected="true"] { background: #7c95ff; color: #0b0f14; }
+.sheet { overflow: auto; padding: 8px 8px 80px; }
+.sheet table { border-collapse: collapse; background: #fff; font-size: 13px; }
+.night .sheet table { background: #151a21; }
+.sheet td { border: 1px solid #d0d5dc; padding: 3px 6px; white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+.night .sheet td { border-color: #2a323d; }
+.sheet tr:first-child td { background: #f1f3f6; font-weight: 600; }
+.night .sheet tr:first-child td { background: #1e252e; }
+.empty { padding: 32px; text-align: center; color: #5b6573; }
+
+/* PowerPoint */
+.slide { margin: 10px 8px; padding: 16px; background: #fff; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+.night .slide { background: #1a1f26; }
+.slide .label { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #2f54eb; }
+.night .slide .label { color: #7c95ff; }
+.slide h2 { margin: 6px 0 10px; font-size: 20px; line-height: 1.3; }
+.slide p { margin: 6px 0; font-size: 15px; line-height: 1.45; }
+.slide p.level-1 { padding-left: 18px; }
+.slide p.level-2 { padding-left: 36px; }
+.slide img { display: block; max-width: 100%; height: auto; margin: 10px auto 0; border-radius: 4px; }
+#content.slides { padding-bottom: 80px; }

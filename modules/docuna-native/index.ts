@@ -1,4 +1,4 @@
-import { requireOptionalNativeModule } from 'expo-modules-core';
+import { requireOptionalNativeModule, type EventSubscription } from 'expo-modules-core';
 
 export interface NormalizedPoint {
   x: number;
@@ -26,7 +26,18 @@ export interface ImageResult {
   height: number;
 }
 
+export interface IncomingFile {
+  uri: string;
+  /** MIME type declared by the sending app, if any. */
+  mimeType: string | null;
+}
+
 interface DocunaNativeModule {
+  addListener(event: 'onIncomingFiles', listener: (event: { files: IncomingFile[] }) => void): EventSubscription;
+  getContentInfoAsync(uri: string): Promise<{ name: string | null; size: number | null; mimeType: string | null }>;
+  /** Copies a content:// file into app storage; resolves with the byte count. */
+  copyContentAsync(uri: string, destinationUri: string): Promise<number>;
+  consumeIncomingFilesAsync(): Promise<IncomingFile[]>;
   isScannerAvailableAsync(): Promise<boolean>;
   scanDocumentAsync(options: { pageLimit?: number; allowGalleryImport?: boolean }): Promise<{ pageUris: string[] } | null>;
   getImageInfoAsync(uri: string): Promise<{ width: number; height: number }>;

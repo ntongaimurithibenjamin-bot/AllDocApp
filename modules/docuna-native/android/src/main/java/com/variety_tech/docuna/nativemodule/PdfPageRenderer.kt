@@ -1,4 +1,4 @@
-package com.varietytech.docuna.nativemodule
+package com.variety_tech.docuna.nativemodule
 
 import android.content.Context
 import android.graphics.Bitmap

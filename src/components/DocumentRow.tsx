@@ -14,9 +14,16 @@ interface DocumentRowProps {
   onLongPress?: (document: Document) => void;
 }
 
+/** "12 pages", "PDF" (page count not yet known) or "Text file". */
+function describeContent(document: Document): string {
+  if (document.kind === 'text') return 'Text file';
+  if (document.kind === 'pdf' && document.pageCount === 0) return 'PDF';
+  return pluralize(document.pageCount, 'page');
+}
+
 export const DocumentRow = memo(function DocumentRow({ document, onPress, onLongPress }: DocumentRowProps) {
   const { colors } = useTheme();
-  const meta = `${pluralize(document.pageCount, 'page')} · ${formatRelativeTime(document.updatedAt)}`;
+  const meta = `${describeContent(document)} · ${formatRelativeTime(document.updatedAt)}`;
   return (
     <Pressable
       accessibilityRole="button"
@@ -31,7 +38,7 @@ export const DocumentRow = memo(function DocumentRow({ document, onPress, onLong
           // Thumbnails are small files on disk; expo-image downsamples and caches them.
           <Image source={{ uri: document.thumbnailUri }} style={{ width: 48, height: 64 }} contentFit="cover" recyclingKey={document.id} />
         ) : (
-          <Icon name="file-document-outline" color="muted" />
+          <Icon name={document.kind === 'text' ? 'file-document-outline' : document.kind === 'pdf' ? 'file-pdf-box' : 'file-image-outline'} color="muted" />
         )}
       </View>
       <View className="flex-1">

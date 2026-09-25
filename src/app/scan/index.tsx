@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useEffectEvent, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
@@ -40,21 +41,26 @@ export default function ScanScreen() {
 
   const saveCapture = async (uris: string[], source: Source) => {
     setState({ phase: 'saving', done: 0, total: uris.length });
+    const succeeded = () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     const onProgress = (done: number, total: number) => setState({ phase: 'saving', done, total });
 
     if (params.replacePageId) {
       await replacePageImage(db, params.replacePageId, uris[0]!);
+      succeeded();
       router.back();
     } else if (params.documentId) {
       const at = params.at !== undefined ? Number(params.at) : undefined;
       await importImagesIntoDocument(db, params.documentId, uris, { atPosition: at, onProgress });
+      succeeded();
       router.back();
     } else {
       const document = await createDocumentFromImages(db, uris, {
         title: defaultScanTitle(),
         source: source === 'photos' ? 'import_image' : 'scan',
+        inInbox: true,
         onProgress,
       });
+      succeeded();
       router.replace({ pathname: '/scan/review', params: { documentId: document.id } });
     }
   };

@@ -1,4 +1,4 @@
-package com.varietytech.docuna.nativemodule
+package com.variety_tech.docuna.nativemodule
 
 import android.app.ActivityManager
 import android.content.Context

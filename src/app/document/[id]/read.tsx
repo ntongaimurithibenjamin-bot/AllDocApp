@@ -1,9 +1,13 @@
+import { BlurTargetView } from 'expo-blur';
 import { File, Paths } from 'expo-file-system';
+import * as Haptics from 'expo-haptics';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import * as Sharing from 'expo-sharing';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Pressable, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes';
 
@@ -11,9 +15,10 @@ import { EmptyState } from '@/components/EmptyState';
 import { ErrorView } from '@/components/ErrorView';
 import { Icon, type IconName } from '@/components/Icon';
 import { PromptDialog } from '@/components/PromptDialog';
-import { SheetList, type SheetItem } from '@/components/SheetList';
+import { GlassSheet } from '@/components/glass/GlassSheet';
+import { GlassDivider, GlassList, GlassRow, GlassTile, GlassTileRow } from '@/components/glass/GlassItems';
 import { listBookmarks, toggleBookmark } from '@/db/repositories/bookmarks';
-import { getDocument, setLastReadPage, setPageCount } from '@/db/repositories/documents';
+import { getDocument, markOpened, setLastReadPage, setPageCount } from '@/db/repositories/documents';
 import { listPages } from '@/db/repositories/pages';
 import { getSetting, setSetting } from '@/db/repositories/settings';
 import { AppError, toAppError } from '@/domain/errors';
@@ -21,12 +26,17 @@ import { fileExtension } from '@/domain/fileTypes';
 import type { Document, Page } from '@/domain/models';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useDb, useDbQuery } from '@/hooks/useDbQuery';
+import { shareDocumentFile } from '@/services/files/shareFile';
 import { buildPagesHtml, buildTextHtml, MAX_TEXT_BYTES } from '@/services/reader/html';
 import { useTheme } from '@/theme';
 
 const PDF_VIEWER = 'file:///android_asset/pdfjs/web/viewer.html';
 const CODE_EXTENSIONS = new Set(['json', 'xml', 'csv', 'tsv', 'log', 'yaml', 'yml', 'ini', 'toml', 'js', 'ts', 'py', 'java', 'kt', 'c', 'h', 'cpp', 'cs', 'go', 'rs', 'php', 'rb', 'sh', 'sql', 'html', 'htm', 'css']);
 const SAVE_POSITION_DELAY_MS = 800;
+/** Controls hide after this long without interaction (full-screen reading). */
+const CHROME_AUTO_HIDE_MS = 3000;
+const ZOOM_BADGE_MS = 1200;
+const KEEP_AWAKE_TAG = 'docuna-reader';
 
 type ZoomMode = 'page-width' | 'page-fit';
 
@@ -34,6 +44,8 @@ type ReaderMessage =
   | { type: 'loaded'; pageCount: number }
   | { type: 'page'; page: number; pageCount: number }
   | { type: 'progress'; percent: number }
+  | { type: 'zoom'; percent: number }
+  | { type: 'tap' }
   | { type: 'find'; current: number; total: number; pending: boolean }
   | { type: 'outline'; items: { index: number; title: string; depth: number }[] }
   | { type: 'error'; message: string };
@@ -42,6 +54,7 @@ interface ReaderData {
   document: Document;
   pages: Page[];
   night: boolean;
+  keepAwake: boolean;
 }
 
 /** Everything the WebView needs, computed once per open (changing it would reload the page). */
@@ -81,16 +94,19 @@ export default function ReaderScreen() {
   const db = useDb();
   const { colors } = useTheme();
   const webview = useRef<WebView>(null);
+  // The document area; glass sheets blur whatever it shows.
+  const blurTarget = useRef<View>(null);
 
   const { data, error, refresh } = useDbQuery(
     async (d): Promise<ReaderData | null> => {
       const document = await getDocument(d, id);
       if (!document) return null;
-      const [pages, night] = await Promise.all([
+      const [pages, night, keepAwake] = await Promise.all([
         document.kind === 'pages' ? listPages(d, id) : Promise.resolve([]),
         getSetting(d, 'readerNightMode'),
+        getSetting(d, 'readerKeepAwake'),
       ]);
-      return { document, pages, night };
+      return { document, pages, night, keepAwake };
     },
     [id],
     // Pages are re-read when edited; document-level changes (rename, page count) don't reload.
@@ -107,7 +123,7 @@ export default function ReaderScreen() {
   const [percent, setPercent] = useState<number | null>(null);
   const [night, setNight] = useState(false);
   const [zoom, setZoom] = useState<ZoomMode>('page-width');
-  const [outline, setOutline] = useState<SheetItem[]>([]);
+  const [outline, setOutline] = useState<{ index: number; title: string; depth: number }[]>([]);
   const [search, setSearch] = useState<{ open: boolean; query: string; current: number; total: number; pending: boolean }>({
     open: false,
     query: '',
@@ -117,7 +133,37 @@ export default function ReaderScreen() {
   });
   const [sheet, setSheet] = useState<'menu' | 'outline' | 'bookmarks' | null>(null);
   const [goToVisible, setGoToVisible] = useState(false);
+  const [chromeVisible, setChromeVisible] = useState(true);
+  const [chromeVersion, setChromeVersion] = useState(0);
+  const [zoomPercent, setZoomPercent] = useState<number | null>(null);
+  const [keepAwake, setKeepAwake] = useState<boolean | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const zoomTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const insets = useSafeAreaInsets();
+
+  /** Shows the controls and restarts the auto-hide countdown. */
+  const showChrome = () => {
+    setChromeVisible(true);
+    setChromeVersion((v) => v + 1);
+  };
+
+  // Full-screen reading: controls hide after a few seconds unless a panel needs them.
+  const chromePinned = search.open || sheet !== null || goToVisible || !loaded;
+  useEffect(() => {
+    if (!chromeVisible || chromePinned) return;
+    const timer = setTimeout(() => setChromeVisible(false), CHROME_AUTO_HIDE_MS);
+    return () => clearTimeout(timer);
+  }, [chromeVisible, chromePinned, chromeVersion]);
+
+  // Keep the screen on while reading (user setting, on by default).
+  const keepAwakeOn = keepAwake ?? data?.keepAwake ?? false;
+  useEffect(() => {
+    if (!keepAwakeOn) return;
+    activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => {});
+    return () => {
+      deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {});
+    };
+  }, [keepAwakeOn]);
 
   // Build the WebView source once the data is in; rebuild only if the page images change.
   const pagesKey = data?.pages.map((p) => `${p.id}:${p.processedUri ?? p.originalUri}`).join('|') ?? '';
@@ -131,6 +177,8 @@ export default function ReaderScreen() {
         if (cancelled) return;
         setNight(data.night);
         setSource(built);
+        // Only documents with something to read count for "Continue reading".
+        if (data.document.kind !== 'pages' || data.pages.length > 0) markOpened(db, id).catch(() => {});
         setPage(start);
       },
       (err: unknown) => !cancelled && setSourceError(toAppError(err)),
@@ -145,6 +193,7 @@ export default function ReaderScreen() {
   useEffect(
     () => () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (zoomTimer.current) clearTimeout(zoomTimer.current);
     },
     [],
   );
@@ -185,18 +234,22 @@ export default function ReaderScreen() {
       case 'progress':
         setPercent(message.percent);
         break;
+      case 'zoom':
+        // The initial fit on open also reports a scale; only show changes once the document is up.
+        if (!loaded) break;
+        setZoomPercent(message.percent);
+        if (zoomTimer.current) clearTimeout(zoomTimer.current);
+        zoomTimer.current = setTimeout(() => setZoomPercent(null), ZOOM_BADGE_MS);
+        break;
+      case 'tap':
+        if (chromeVisible && !chromePinned) setChromeVisible(false);
+        else showChrome();
+        break;
       case 'find':
         setSearch((s) => ({ ...s, current: message.current, total: message.total, pending: message.pending }));
         break;
       case 'outline':
-        setOutline(
-          message.items.map((item) => ({
-            key: String(item.index),
-            label: item.title,
-            depth: Math.min(item.depth, 4),
-            onPress: () => run(`window.docuna.goToOutline(${item.index})`),
-          })),
-        );
+        setOutline(message.items.map((item) => ({ ...item, depth: Math.min(item.depth, 4) })));
         break;
       case 'error':
         if (__DEV__) console.warn('Reader error:', message.message);
@@ -226,16 +279,18 @@ export default function ReaderScreen() {
 
   const toggleCurrentBookmark = useAsyncAction(async () => {
     const pageId = kind === 'pages' ? (data?.pages[page - 1]?.id ?? null) : null;
-    await toggleBookmark(db, id, page - 1, pageId);
+    const added = await toggleBookmark(db, id, page - 1, pageId);
+    Haptics.impactAsync(added ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   });
 
   const share = useAsyncAction(async () => {
-    if (!document?.fileUri) return;
-    if (!(await Sharing.isAvailableAsync())) throw new AppError('unknown', 'Sharing unavailable');
-    await Sharing.shareAsync(document.fileUri, {
-      mimeType: document.mimeType ?? (kind === 'pdf' ? 'application/pdf' : 'text/plain'),
-      dialogTitle: document.title,
-    });
+    if (document) await shareDocumentFile(document);
+  });
+
+  const toggleKeepAwake = useAsyncAction(async () => {
+    const next = !keepAwakeOn;
+    setKeepAwake(next);
+    await setSetting(db, 'readerKeepAwake', next);
   });
 
   const applyZoom = (mode: ZoomMode) => {
@@ -255,40 +310,68 @@ export default function ReaderScreen() {
     run('window.docuna.clearFind()');
   };
 
-  const buildMenu = (): SheetItem[] => {
-    if (!document) return [];
-    const items: SheetItem[] = [];
-    if (paged) items.push({ key: 'goto', label: 'Go to page…', icon: 'numeric', onPress: () => setGoToVisible(true) });
-    if (outline.length > 0) items.push({ key: 'outline', label: 'Contents', icon: 'format-list-bulleted', onPress: () => setSheet('outline') });
-    if (paged) items.push({ key: 'bookmarks', label: 'Bookmarks', icon: 'bookmark-multiple-outline', detail: String(bookmarks.data?.length ?? 0), onPress: () => setSheet('bookmarks') });
-    if (paged) {
-      items.push(
-        zoom === 'page-width'
-          ? { key: 'fit', label: 'Fit whole page', icon: 'fit-to-page-outline', onPress: () => applyZoom('page-fit') }
-          : { key: 'fit', label: 'Fit page width', icon: 'arrow-expand-horizontal', onPress: () => applyZoom('page-width') },
-      );
-    }
-    items.push({ key: 'night', label: night ? 'Night mode: on' : 'Night mode: off', icon: night ? 'weather-night' : 'white-balance-sunny', onPress: () => toggleNight.run() });
-    if (document.fileUri) items.push({ key: 'share', label: 'Share file', icon: 'share-variant-outline', onPress: () => share.run() });
-    if (kind === 'pages') items.push({ key: 'edit', label: 'Edit pages', icon: 'file-edit-outline', onPress: () => router.push(`/document/${id}/pages`) });
-    items.push({ key: 'details', label: 'Document details', icon: 'information-outline', onPress: () => router.push(`/document/${id}`) });
-    return items;
+  const closeSheet = () => setSheet(null);
+  /** Closes the sheet, then runs the action (e.g. navigating) once it is out of the way. */
+  const closeThen = (action: () => void) => {
+    setSheet(null);
+    action();
   };
 
-  const bookmarkItems: SheetItem[] = (bookmarks.data ?? []).map((bookmark) => ({
-    key: bookmark.id,
-    label: bookmark.label ?? `Page ${bookmark.pageIndex + 1}`,
-    icon: 'bookmark',
-    onPress: () => goToPage(bookmark.pageIndex + 1),
-  }));
+  const menuSheet = document ? (
+    <>
+      <GlassTileRow>
+        <GlassTile
+          icon={night ? 'weather-night' : 'white-balance-sunny'}
+          label="Night mode"
+          active={night}
+          onPress={() => toggleNight.run()}
+        />
+        <GlassTile
+          icon={keepAwakeOn ? 'cellphone-screenshot' : 'cellphone-off'}
+          label="Keep screen on"
+          active={keepAwakeOn}
+          onPress={() => toggleKeepAwake.run()}
+        />
+        {paged ? (
+          <GlassTile
+            icon={zoom === 'page-fit' ? 'fit-to-page-outline' : 'arrow-expand-horizontal'}
+            label={zoom === 'page-fit' ? 'Whole page' : 'Fit width'}
+            onPress={() => applyZoom(zoom === 'page-fit' ? 'page-width' : 'page-fit')}
+          />
+        ) : null}
+        {document.fileUri ? (
+          <GlassTile icon="share-variant-outline" label="Share" onPress={() => closeThen(() => share.run())} />
+        ) : null}
+      </GlassTileRow>
+      <GlassDivider />
+      {paged ? <GlassRow icon="numeric" label="Go to page" detail={pageCount ? `${page} of ${pageCount}` : undefined} onPress={() => closeThen(() => setGoToVisible(true))} /> : null}
+      {outline.length > 0 ? <GlassRow icon="format-list-bulleted" label="Contents" onPress={() => setSheet('outline')} /> : null}
+      {paged ? (
+        <GlassRow
+          icon="bookmark-multiple-outline"
+          label="Bookmarks"
+          detail={String(bookmarks.data?.length ?? 0)}
+          onPress={() => setSheet('bookmarks')}
+        />
+      ) : null}
+      {kind === 'pages' ? <GlassRow icon="file-edit-outline" label="Edit pages" onPress={() => closeThen(() => router.push(`/document/${id}/pages`))} /> : null}
+      <GlassRow icon="information-outline" label="Document details" onPress={() => closeThen(() => router.push(`/document/${id}`))} />
+    </>
+  ) : null;
 
-  if (error) return <ErrorView error={error} onRetry={refresh} />;
-  if (sourceError) return <ErrorView error={sourceError} onRetry={() => router.replace(`/document/${id}/read`)} />;
+  // States without the reader keep a normal header, so there is always a way back.
+  const plainHeader = <Stack.Screen options={{ headerShown: true, title: document?.title ?? '' }} />;
+  if (error) return <>{plainHeader}<ErrorView error={error} onRetry={refresh} /></>;
+  if (sourceError) {
+    return <>{plainHeader}<ErrorView error={sourceError} onRetry={() => router.replace(`/document/${id}/read`)} /></>;
+  }
   if (data === null) {
-    return <EmptyState icon="file-hidden" title="Document not found" actionLabel="Go back" onAction={() => router.back()} />;
+    return <>{plainHeader}<EmptyState icon="file-hidden" title="Document not found" actionLabel="Go back" onAction={() => router.back()} /></>;
   }
   if (document && kind === 'pages' && data && data.pages.length === 0) {
     return (
+      <>
+      {plainHeader}
       <EmptyState
         icon="file-outline"
         title="No pages yet"
@@ -296,56 +379,41 @@ export default function ReaderScreen() {
         actionLabel="Add pages"
         onAction={() => router.replace({ pathname: '/scan', params: { documentId: id } })}
       />
+      </>
     );
   }
 
   const indicator = paged && pageCount > 0 ? `${page} / ${pageCount}` : percent !== null ? `${percent}%` : null;
 
+  const searchBar = search.open ? (
+    <View className="flex-row items-center gap-2 px-3 pb-2">
+      <TextInput
+        autoFocus
+        value={search.query}
+        onChangeText={(query) => setSearch((st) => ({ ...st, query }))}
+        onSubmitEditing={() => submitSearch(false)}
+        placeholder="Find in document"
+        placeholderTextColor={colors.muted}
+        returnKeyType="search"
+        accessibilityLabel="Find in document"
+        className="flex-1 rounded-lg bg-background px-3 py-2 text-base text-text"
+      />
+      <Text accessibilityLiveRegion="polite" className="min-w-12 text-center text-sm text-muted">
+        {search.pending ? '…' : search.total > 0 ? `${search.current}/${search.total}` : search.query ? '0' : ''}
+      </Text>
+      <HeaderButton icon="chevron-up" label="Previous match" onPress={() => submitSearch(true)} />
+      <HeaderButton icon="chevron-down" label="Next match" onPress={() => submitSearch(false)} />
+      <HeaderButton icon="close" label="Close search" onPress={closeSearch} />
+    </View>
+  ) : null;
+
   return (
     <SafeAreaView edges={['bottom']} className="flex-1 bg-background">
-      <Stack.Screen
-        options={{
-          title: document?.title ?? '',
-          headerRight: () => (
-            <View className="flex-row items-center">
-              {searchable ? <HeaderButton icon="magnify" label="Search in document" onPress={() => setSearch((s) => ({ ...s, open: true }))} /> : null}
-              {paged ? (
-                <HeaderButton
-                  icon={bookmarked ? 'bookmark' : 'bookmark-outline'}
-                  label={bookmarked ? 'Remove bookmark' : 'Bookmark this page'}
-                  active={bookmarked}
-                  onPress={() => toggleCurrentBookmark.run()}
-                />
-              ) : null}
-              <HeaderButton icon="dots-vertical" label="More options" onPress={() => setSheet('menu')} />
-            </View>
-          ),
-        }}
-      />
+      {/* Full-screen reading: the stack header is replaced by an overlay that hides on tap. */}
+      <Stack.Screen options={{ headerShown: false }} />
+      <StatusBar hidden={!chromeVisible} />
 
-      {search.open ? (
-        <View className="flex-row items-center gap-2 border-b border-border bg-surface px-3 py-2">
-          <TextInput
-            autoFocus
-            value={search.query}
-            onChangeText={(query) => setSearch((s) => ({ ...s, query }))}
-            onSubmitEditing={() => submitSearch(false)}
-            placeholder="Find in document"
-            placeholderTextColor={colors.muted}
-            returnKeyType="search"
-            accessibilityLabel="Find in document"
-            className="flex-1 rounded-lg bg-background px-3 py-2 text-base text-text"
-          />
-          <Text accessibilityLiveRegion="polite" className="min-w-12 text-center text-sm text-muted">
-            {search.pending ? '…' : search.total > 0 ? `${search.current}/${search.total}` : search.query ? '0' : ''}
-          </Text>
-          <HeaderButton icon="chevron-up" label="Previous match" onPress={() => submitSearch(true)} />
-          <HeaderButton icon="chevron-down" label="Next match" onPress={() => submitSearch(false)} />
-          <HeaderButton icon="close" label="Close search" onPress={closeSearch} />
-        </View>
-      ) : null}
-
-      <View className="flex-1">
+      <BlurTargetView ref={blurTarget} style={{ flex: 1 }}>
         {source && !crashed ? (
           <WebView
             ref={webview}
@@ -383,7 +451,50 @@ export default function ReaderScreen() {
           </View>
         ) : null}
 
-        {indicator && loaded && !crashed ? (
+        {zoomPercent !== null ? (
+          <View
+            pointerEvents="none"
+            accessibilityLiveRegion="polite"
+            className="absolute self-center rounded-full bg-black/70 px-4 py-2"
+            style={{ top: '45%' }}
+          >
+            <Text className="text-lg font-semibold text-white">{zoomPercent}%</Text>
+          </View>
+        ) : null}
+
+        {chromeVisible ? (
+          <Animated.View
+            entering={FadeIn.duration(150)}
+            exiting={FadeOut.duration(200)}
+            className="absolute left-0 right-0 top-0 border-b border-border bg-surface"
+            style={{ paddingTop: insets.top }}
+          >
+            <View className="h-14 flex-row items-center pl-2 pr-1">
+              <HeaderButton icon="arrow-left" label="Back" onPress={() => router.back()} />
+              <Text numberOfLines={1} className="ml-2 flex-1 text-lg font-semibold text-text">
+                {document?.title ?? ''}
+              </Text>
+              {searchable ? (
+                <HeaderButton icon="magnify" label="Search in document" onPress={() => setSearch((st) => ({ ...st, open: true }))} />
+              ) : null}
+              {paged ? (
+                <HeaderButton
+                  icon={bookmarked ? 'bookmark' : 'bookmark-outline'}
+                  label={bookmarked ? 'Remove bookmark' : 'Bookmark this page'}
+                  active={bookmarked}
+                  onPress={() => {
+                    showChrome();
+                    toggleCurrentBookmark.run();
+                  }}
+                />
+              ) : null}
+              <HeaderButton icon="dots-vertical" label="More options" onPress={() => setSheet('menu')} />
+            </View>
+            {searchBar}
+          </Animated.View>
+        ) : null}
+
+        {indicator && loaded && !crashed && chromeVisible ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={paged ? `Page ${page} of ${pageCount}. Tap to go to a page.` : `${percent}% read`}
@@ -394,17 +505,35 @@ export default function ReaderScreen() {
             <Text className="text-sm font-medium text-white">{indicator}</Text>
           </Pressable>
         ) : null}
-      </View>
+      </BlurTargetView>
 
-      <SheetList visible={sheet === 'menu'} items={sheet === 'menu' ? buildMenu() : []} onClose={() => setSheet(null)} />
-      <SheetList visible={sheet === 'outline'} title="Contents" items={outline} onClose={() => setSheet(null)} />
-      <SheetList
-        visible={sheet === 'bookmarks'}
-        title="Bookmarks"
-        items={bookmarkItems}
-        emptyText="Tap the bookmark icon at the top to bookmark the page you're on."
-        onClose={() => setSheet(null)}
-      />
+      <GlassSheet visible={sheet === 'menu'} onClose={closeSheet} blurTarget={blurTarget} title={document?.title} subtitle={indicator ?? undefined}>
+        {menuSheet}
+      </GlassSheet>
+      <GlassSheet visible={sheet === 'outline'} onClose={closeSheet} blurTarget={blurTarget} title="Contents" scrollable>
+        <GlassList>
+          {outline.map((entry) => (
+            <GlassRow
+              key={entry.index}
+              label={entry.title}
+              indent={entry.depth}
+              onPress={() => closeThen(() => run(`window.docuna.goToOutline(${entry.index})`))}
+            />
+          ))}
+        </GlassList>
+      </GlassSheet>
+      <GlassSheet visible={sheet === 'bookmarks'} onClose={closeSheet} blurTarget={blurTarget} title="Bookmarks" scrollable>
+        <GlassList empty="Tap the bookmark icon at the top to bookmark the page you're on.">
+          {(bookmarks.data ?? []).map((bookmark) => (
+            <GlassRow
+              key={bookmark.id}
+              icon="bookmark"
+              label={bookmark.label ?? `Page ${bookmark.pageIndex + 1}`}
+              onPress={() => closeThen(() => goToPage(bookmark.pageIndex + 1))}
+            />
+          ))}
+        </GlassList>
+      </GlassSheet>
       <PromptDialog
         visible={goToVisible}
         title={`Go to page (1–${pageCount || 1})`}

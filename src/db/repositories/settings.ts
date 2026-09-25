@@ -10,6 +10,8 @@ const DEFAULTS = {
   autoExportDirectoryUri: null as string | null,
   analyticsEnabled: true,
   readerNightMode: false,
+  /** Keep the screen on while a document is open in the reader. */
+  readerKeepAwake: true,
 };
 
 export type Settings = typeof DEFAULTS;

@@ -1,4 +1,4 @@
-package com.varietytech.docuna.nativemodule
+package com.variety_tech.docuna.nativemodule
 
 import android.app.Activity
 import com.google.android.gms.common.ConnectionResult
@@ -37,6 +37,8 @@ class DocunaNativeModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("DocunaNative")
+
+    Events("onIncomingFiles")
 
     // The ML Kit scanner needs Google Play services (absent on some devices, e.g. Huawei).
     AsyncFunction("isScannerAvailableAsync") {
@@ -104,6 +106,23 @@ class DocunaNativeModule : Module() {
 
     AsyncFunction("getPdfInfoAsync") { uri: String ->
       mapOf("pageCount" to PdfPageRenderer.pageCount(context, uri))
+    }
+
+    AsyncFunction("getContentInfoAsync") { uri: String -> IncomingFiles.info(context, uri) }
+
+    AsyncFunction("copyContentAsync") { uri: String, destinationUri: String ->
+      IncomingFiles.copy(context, uri, destinationUri)
+    }
+
+    /** Files the app was launched with ("Open with" / "Share"), reported once. */
+    AsyncFunction("consumeIncomingFilesAsync") {
+      IncomingFiles.fromIntent(appContext.currentActivity?.intent)
+    }
+
+    // Files handed over while Docuna is already running.
+    OnNewIntent { intent ->
+      val files = IncomingFiles.fromIntent(intent)
+      if (files.isNotEmpty()) sendEvent("onIncomingFiles", mapOf("files" to files))
     }
 
     AsyncFunction("renderPdfPageAsync") { options: RenderPdfPageOptions ->

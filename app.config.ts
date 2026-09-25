@@ -13,6 +13,28 @@ const VARIANTS: Record<Variant, { name: string; packageSuffix: string }> = {
 
 const { name, packageSuffix } = VARIANTS[variant];
 
+/** Document types Docuna offers to open ("Open with") and receive ("Share"). */
+const DOCUMENT_MIME_TYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.oasis.opendocument.text',
+  'application/vnd.oasis.opendocument.spreadsheet',
+  'application/vnd.oasis.opendocument.presentation',
+  'application/rtf',
+  'application/epub+zip',
+  'application/json',
+  'text/plain',
+  'text/csv',
+  'text/markdown',
+];
+
+const mimeData = (types: string[]) => types.map((mimeType) => ({ mimeType }));
+
 const config: ExpoConfig = {
   name,
   slug: 'docuna',
@@ -22,7 +44,7 @@ const config: ExpoConfig = {
   icon: './assets/icon.png',
   userInterfaceStyle: 'automatic',
   android: {
-    package: `com.varietytech.docuna${packageSuffix}`,
+    package: `com.variety_tech.docuna${packageSuffix}`,
     adaptiveIcon: {
       backgroundColor: '#E6F4FE',
       foregroundImage: './assets/android-icon-foreground.png',
@@ -30,6 +52,26 @@ const config: ExpoConfig = {
       monochromeImage: './assets/android-icon-monochrome.png',
     },
     predictiveBackGestureEnabled: false,
+    intentFilters: [
+      // "Open with Docuna" from file managers, WhatsApp, Downloads… Documents only: Docuna
+      // shouldn't claim to be the phone's photo viewer.
+      {
+        action: 'VIEW',
+        category: ['DEFAULT', 'BROWSABLE'],
+        data: [{ scheme: 'content' }, { scheme: 'file' }, ...mimeData(DOCUMENT_MIME_TYPES)],
+      },
+      // "Share → Docuna": documents, plus photos (kept as a document).
+      {
+        action: 'SEND',
+        category: ['DEFAULT'],
+        data: mimeData([...DOCUMENT_MIME_TYPES, 'image/*']),
+      },
+      {
+        action: 'SEND_MULTIPLE',
+        category: ['DEFAULT'],
+        data: mimeData(['image/*', 'application/pdf']),
+      },
+    ],
     // The overlay permission only serves the development menu.
     blockedPermissions: variant === 'production' ? ['android.permission.SYSTEM_ALERT_WINDOW'] : [],
   },
@@ -57,8 +99,8 @@ const config: ExpoConfig = {
         microphonePermission: false,
       },
     ],
-    // Offline PDF reader (Mozilla PDF.js) bundled as Android assets.
-    './plugins/withPdfJsAssets',
+    // Offline readers (PDF.js; Word/Excel/PowerPoint) bundled as Android assets.
+    './plugins/withReaderAssets',
   ],
   experiments: {
     typedRoutes: true,

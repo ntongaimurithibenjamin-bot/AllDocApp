@@ -1,7 +1,8 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 
+import { Button } from '@/components/Button';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorView } from '@/components/ErrorView';
 import { Icon } from '@/components/Icon';
@@ -15,16 +16,16 @@ import {
   renameDocument,
   setArchived,
   setFavorite,
-  trashDocument,
 } from '@/db/repositories/documents';
 import { getFolder } from '@/db/repositories/folders';
 import { listPages } from '@/db/repositories/pages';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useDb, useDbQuery } from '@/hooks/useDbQuery';
-import { formatRelativeTime, pluralize } from '@/lib/format';
-import { TRASH_RETENTION_DAYS } from '@/services/documents/lifecycle';
+import { useDocumentActions } from '@/hooks/useDocumentActions';
+import { formatBytes, formatRelativeTime, pluralize } from '@/lib/format';
 
 export default function DocumentScreen() {
+  const { trashWithUndo } = useDocumentActions();
   const { id } = useLocalSearchParams<{ id: string }>();
   const db = useDb();
   const [renameVisible, setRenameVisible] = useState(false);
@@ -47,10 +48,6 @@ export default function DocumentScreen() {
   const toggleFavorite = useAsyncAction((value: boolean) => setFavorite(db, id, value));
   const toggleArchived = useAsyncAction((value: boolean) => setArchived(db, id, value));
   const file = useAsyncAction(() => markFiled(db, id));
-  const trash = useAsyncAction(async () => {
-    await trashDocument(db, id);
-    router.back();
-  });
 
   if (error) return <ErrorView error={error} onRetry={refresh} />;
   if (loading && !data) return null;
@@ -68,15 +65,10 @@ export default function DocumentScreen() {
 
   const { document, pages, folder } = data;
 
-  const confirmTrash = () =>
-    Alert.alert(
-      'Move to trash?',
-      `"${document.title}" will be permanently deleted after ${TRASH_RETENTION_DAYS} days. You can restore it from Trash until then.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Move to trash', style: 'destructive', onPress: () => trash.run() },
-      ],
-    );
+  const moveToTrash = () => {
+    router.back();
+    void trashWithUndo(document);
+  };
 
   return (
     <ScrollView className="flex-1 bg-background" contentContainerClassName="pb-10">
@@ -92,36 +84,46 @@ export default function DocumentScreen() {
         </Text>
       </View>
 
-      <Section
-        title="Pages"
-        actionLabel={pages.length > 1 ? 'Arrange' : undefined}
-        onAction={() => router.push(`/document/${id}/pages`)}
-      >
-        <View className="flex-row flex-wrap px-2.5">
-          {pages.map((page, index) => (
+      <View className="px-4 pt-4">
+        <Button label="Read" icon="book-open-page-variant-outline" size="lg" onPress={() => router.push(`/document/${id}/read`)} />
+      </View>
+
+      {document.kind === 'pages' ? (
+        <Section
+          title="Pages"
+          actionLabel={pages.length > 1 ? 'Arrange' : undefined}
+          onAction={() => router.push(`/document/${id}/pages`)}
+        >
+          <View className="flex-row flex-wrap px-2.5">
+            {pages.map((page, index) => (
+              <Pressable
+                key={page.id}
+                accessibilityRole="button"
+                accessibilityLabel={`Edit page ${index + 1}`}
+                onPress={() => router.push(`/document/${id}/page/${page.id}`)}
+                className="w-1/3 p-1.5"
+              >
+                <PageThumb page={page} index={index} />
+              </Pressable>
+            ))}
             <Pressable
-              key={page.id}
               accessibilityRole="button"
-              accessibilityLabel={`Edit page ${index + 1}`}
-              onPress={() => router.push(`/document/${id}/page/${page.id}`)}
+              accessibilityLabel="Add pages"
+              onPress={() => router.push({ pathname: '/scan', params: { documentId: id } })}
               className="w-1/3 p-1.5"
             >
-              <PageThumb page={page} index={index} />
+              <View className="aspect-[3/4] items-center justify-center rounded-lg border border-dashed border-border">
+                <Icon name="plus" size={28} color="muted" />
+                <Text className="mt-1 text-sm text-muted">Add pages</Text>
+              </View>
             </Pressable>
-          ))}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Add pages"
-            onPress={() => router.push({ pathname: '/scan', params: { documentId: id } })}
-            className="w-1/3 p-1.5"
-          >
-            <View className="aspect-[3/4] items-center justify-center rounded-lg border border-dashed border-border">
-              <Icon name="plus" size={28} color="muted" />
-              <Text className="mt-1 text-sm text-muted">Add pages</Text>
-            </View>
-          </Pressable>
-        </View>
-      </Section>
+          </View>
+        </Section>
+      ) : (
+        <Section title="File" card>
+          <ListRow icon={document.kind === 'pdf' ? 'file-pdf-box' : 'file-document-outline'} title={document.originalName ?? document.title} subtitle={formatBytes(document.sizeBytes)} />
+        </Section>
+      )}
 
       <Section title="Document" card>
         <ListRow icon="pencil-outline" title="Rename" onPress={() => setRenameVisible(true)} />
@@ -153,7 +155,7 @@ export default function DocumentScreen() {
           onPress={() => toggleArchived.run(!document.isArchived)}
           accessory={null}
         />
-        <ListRow icon="delete-outline" title="Move to trash" destructive onPress={confirmTrash} accessory={null} />
+        <ListRow icon="delete-outline" title="Move to trash" destructive onPress={moveToTrash} accessory={null} />
       </Section>
 
       <View className="mt-6 flex-row items-center gap-2 px-4">

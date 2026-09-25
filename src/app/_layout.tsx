@@ -7,11 +7,14 @@ import { Suspense, useEffect, useMemo } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { IncomingFilesHandler } from '@/components/IncomingFilesHandler';
+import { OverlayProvider } from '@/components/overlay/OverlayProvider';
 import { DatabaseProvider, useDatabase } from '@/db/DatabaseProvider';
 import { getSetting } from '@/db/repositories/settings';
 import { toAppError } from '@/domain/errors';
 import { applyThemePreference } from '@/services/appearance';
 import { purgeExpiredTrash } from '@/services/documents/lifecycle';
+import { repairPdfThumbnails } from '@/services/pdf';
 import { useTheme } from '@/theme';
 
 SplashScreen.preventAutoHideAsync().catch(() => {
@@ -41,9 +44,11 @@ function AppShell() {
       .catch(() => {})
       .finally(() => SplashScreen.hideAsync().catch(() => {}));
     // Housekeeping must never block startup.
-    purgeExpiredTrash(db).catch((error: unknown) => {
-      if (__DEV__) console.warn('Trash purge failed', error);
-    });
+    purgeExpiredTrash(db)
+      .then(() => repairPdfThumbnails(db))
+      .catch((error: unknown) => {
+        if (__DEV__) console.warn('Startup housekeeping failed', error);
+      });
   }, [db]);
 
   const navigationTheme = useMemo(() => {
@@ -65,6 +70,8 @@ function AppShell() {
     <View style={[{ flex: 1 }, cssVars]}>
       <ThemeProvider value={navigationTheme}>
         <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+        <OverlayProvider>
+        <IncomingFilesHandler />
         <Stack
           screenOptions={{
             headerStyle: { backgroundColor: colors.surface },
@@ -77,6 +84,7 @@ function AppShell() {
           <Stack.Screen name="scan/index" options={{ title: 'Scan', presentation: 'modal' }} />
           <Stack.Screen name="scan/review" options={{ title: 'Review' }} />
           <Stack.Screen name="document/[id]/index" options={{ title: '' }} />
+          <Stack.Screen name="document/[id]/read" options={{ title: '' }} />
           <Stack.Screen name="document/[id]/pages" options={{ title: 'Pages' }} />
           <Stack.Screen name="document/[id]/page/[pageId]/index" options={{ title: '' }} />
           <Stack.Screen name="document/[id]/page/[pageId]/crop" options={{ title: 'Crop', presentation: 'fullScreenModal' }} />
@@ -87,6 +95,7 @@ function AppShell() {
           <Stack.Screen name="settings/storage" options={{ title: 'Storage' }} />
           <Stack.Screen name="settings/privacy" options={{ title: 'Privacy' }} />
         </Stack>
+        </OverlayProvider>
       </ThemeProvider>
     </View>
   );

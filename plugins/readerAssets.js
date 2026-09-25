@@ -35,4 +35,30 @@ function syncPdfJsAssets(projectRoot, androidRoot) {
   return target;
 }
 
-module.exports = { syncPdfJsAssets };
+/**
+ * Copies the office reader (reader-web/office) and its vendored converters (vendor/office) into
+ * android/app/src/main/assets/office.
+ */
+function syncOfficeAssets(projectRoot, androidRoot) {
+  const vendor = path.join(projectRoot, 'vendor', 'office');
+  const viewer = path.join(projectRoot, 'reader-web', 'office');
+  const target = path.join(androidRoot, 'app', 'src', 'main', 'assets', 'office');
+  if (!fs.existsSync(vendor)) throw new Error('vendor/office is missing. Run scripts/update-office-libs.sh.');
+
+  fs.rmSync(target, { recursive: true, force: true });
+  fs.mkdirSync(target, { recursive: true });
+  for (const dir of [vendor, viewer]) {
+    for (const file of fs.readdirSync(dir)) {
+      const from = path.join(dir, file);
+      if (fs.statSync(from).isFile()) fs.copyFileSync(from, path.join(target, file));
+    }
+  }
+  return target;
+}
+
+/** Everything the in-app reader loads from file:///android_asset. */
+function syncReaderAssets(projectRoot, androidRoot) {
+  return [syncPdfJsAssets(projectRoot, androidRoot), syncOfficeAssets(projectRoot, androidRoot)];
+}
+
+module.exports = { syncPdfJsAssets, syncOfficeAssets, syncReaderAssets };

@@ -4,7 +4,7 @@
  *
  * App → viewer: window.docuna.{goToPage, find, clearFind, setZoom, setNight, goToOutline}
  * Viewer → app: ReactNativeWebView.postMessage(JSON) with a `type` of
- *   loaded | page | find | outline | error
+ *   loaded | page | zoom | tap | find | outline | error
  */
 (function () {
   'use strict';
@@ -21,6 +21,18 @@
       /* not inside the app */
     }
   }
+
+// Single tap (not on a link or while selecting text) toggles the app's controls. A second tap
+  // within 280 ms is a double-tap (zoom) and cancels the toggle.
+  var tapTimer = null;
+  document.addEventListener('click', function (event) {
+    var target = event.target;
+    if (target && target.closest && target.closest('a, button, input, textarea, select, [role="button"]')) return;
+    var selection = window.getSelection && window.getSelection();
+    if (selection && String(selection).length > 0) return;
+    if (tapTimer) { clearTimeout(tapTimer); tapTimer = null; return; }
+    tapTimer = setTimeout(function () { tapTimer = null; post({ type: 'tap' }); }, 280);
+  }, true);
 
   function applyNight(enabled) {
     document.documentElement.classList.toggle('docuna-night', !!enabled);
@@ -74,6 +86,10 @@
           }),
         });
       });
+    });
+
+    bus.on('scalechanging', function (event) {
+      post({ type: 'zoom', percent: Math.round(event.scale * 100) });
     });
 
     bus.on('pagechanging', function (event) {

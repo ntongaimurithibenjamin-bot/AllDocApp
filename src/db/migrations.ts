@@ -214,6 +214,74 @@ CREATE TABLE bookmarks (
 CREATE INDEX idx_bookmarks_doc ON bookmarks(document_id, page_index);
 `,
   },
+  {
+    // "Continue reading" on Home.
+    version: 3,
+    sql: `
+ALTER TABLE documents ADD COLUMN last_opened_at INTEGER;
+CREATE INDEX idx_documents_opened ON documents(last_opened_at DESC) WHERE last_opened_at IS NOT NULL;
+`,
+  },
+  {
+    // Files opened from the phone ("Open a file") are not scans: take them out of the inbox.
+    // Until now, image documents came from Open a file unless the scanner was unavailable.
+    version: 4,
+    sql: `UPDATE documents SET in_inbox = 0 WHERE source IN ('import_pdf', 'import_file', 'import_image');`,
+  },
+  {
+    // Office documents: kinds are validated by the app (DocumentKind), not a CHECK, so adding a
+    // format never needs another table rebuild.
+    version: 5,
+    rebuildsTables: true,
+    sql: `
+CREATE TABLE documents_v5 (
+  id             TEXT PRIMARY KEY NOT NULL,
+  title          TEXT NOT NULL,
+  folder_id      TEXT REFERENCES folders(id) ON DELETE SET NULL,
+  source         TEXT NOT NULL CHECK (source IN ('scan','import_pdf','import_image','import_file')),
+  kind           TEXT NOT NULL DEFAULT 'pages',
+  file_uri       TEXT,
+  mime_type      TEXT,
+  original_name  TEXT,
+  page_count     INTEGER NOT NULL DEFAULT 0,
+  thumbnail_uri  TEXT,
+  pdf_uri        TEXT,
+  pdf_stale      INTEGER NOT NULL DEFAULT 1,
+  size_bytes     INTEGER NOT NULL DEFAULT 0,
+  is_favorite    INTEGER NOT NULL DEFAULT 0,
+  is_archived    INTEGER NOT NULL DEFAULT 0,
+  in_inbox       INTEGER NOT NULL DEFAULT 1,
+  suggested_json TEXT,
+  last_read_page INTEGER NOT NULL DEFAULT 0,
+  last_opened_at INTEGER,
+  created_at     INTEGER NOT NULL,
+  updated_at     INTEGER NOT NULL,
+  deleted_at     INTEGER
+);
+INSERT INTO documents_v5 (rowid, id, title, folder_id, source, kind, file_uri, mime_type, original_name,
+  page_count, thumbnail_uri, pdf_uri, pdf_stale, size_bytes, is_favorite, is_archived, in_inbox,
+  suggested_json, last_read_page, last_opened_at, created_at, updated_at, deleted_at)
+SELECT rowid, id, title, folder_id, source, kind, file_uri, mime_type, original_name,
+  page_count, thumbnail_uri, pdf_uri, pdf_stale, size_bytes, is_favorite, is_archived, in_inbox,
+  suggested_json, last_read_page, last_opened_at, created_at, updated_at, deleted_at
+FROM documents;
+DROP TABLE documents;
+ALTER TABLE documents_v5 RENAME TO documents;
+CREATE INDEX idx_documents_folder ON documents(folder_id, updated_at DESC);
+CREATE INDEX idx_documents_recent ON documents(updated_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX idx_documents_opened ON documents(last_opened_at DESC) WHERE last_opened_at IS NOT NULL;
+CREATE TRIGGER documents_ai AFTER INSERT ON documents BEGIN
+  INSERT INTO title_fts(rowid, title) VALUES (new.rowid, new.title);
+END;
+CREATE TRIGGER documents_ad AFTER DELETE ON documents BEGIN
+  INSERT INTO title_fts(title_fts, rowid, title) VALUES ('delete', old.rowid, old.title);
+END;
+CREATE TRIGGER documents_au AFTER UPDATE OF title ON documents BEGIN
+  INSERT INTO title_fts(title_fts, rowid, title) VALUES ('delete', old.rowid, old.title);
+  INSERT INTO title_fts(rowid, title) VALUES (new.rowid, new.title);
+END;
+`,
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

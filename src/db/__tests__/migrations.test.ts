@@ -3,7 +3,14 @@
  */
 import { LATEST_SCHEMA_VERSION, migrate } from '../migrations';
 import { toggleBookmark, listBookmarks } from '../repositories/bookmarks';
-import { createDocument, getDocument, setLastReadPage } from '../repositories/documents';
+import {
+  createDocument,
+  getContinueReading,
+  getDocument,
+  markOpened,
+  setLastReadPage,
+  trashDocument,
+} from '../repositories/documents';
 import { reorderPages } from '../repositories/pages';
 import { searchDocuments } from '../repositories/search';
 import { createNodeSqlDb } from './nodeSqlite';
@@ -67,5 +74,45 @@ describe('file documents and reading state', () => {
     expect((await listBookmarks(db, doc.id)).map((b) => b.pageIndex)).toEqual([0]);
     expect(await toggleBookmark(db, doc.id, 0, 'b')).toBe(false);
     expect(await listBookmarks(db, doc.id)).toEqual([]);
+  });
+});
+
+describe('continue reading', () => {
+  it('returns the most recently opened live document', async () => {
+    const db = createNodeSqlDb();
+    await migrate(db);
+    expect(await getContinueReading(db)).toBeNull();
+
+    const a = await createDocument(db, { title: 'A', source: 'scan' });
+    const b = await createDocument(db, { title: 'B', source: 'scan' });
+    await markOpened(db, a.id);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await markOpened(db, b.id);
+    expect((await getContinueReading(db))?.id).toBe(b.id);
+
+    await trashDocument(db, b.id);
+    expect((await getContinueReading(db))?.id).toBe(a.id);
+  });
+});
+
+describe('migration 5 (office kinds)', () => {
+  it('keeps every document and its reading state, and accepts the new kinds', async () => {
+    const db = createNodeSqlDb();
+    await migrate(db, 4);
+    await db.runAsync(
+      `INSERT INTO documents (id, title, source, kind, page_count, last_read_page, last_opened_at, created_at, updated_at)
+       VALUES ('d1', 'Lease', 'import_pdf', 'pdf', 12, 7, 99, 1, 1)`,
+    );
+    await migrate(db);
+
+    expect(await getDocument(db, 'd1')).toMatchObject({ title: 'Lease', kind: 'pdf', lastReadPage: 7, lastOpenedAt: 99 });
+    expect((await searchDocuments(db, 'lease'))[0]?.documentId).toBe('d1');
+
+    const sheet = await createDocument(db, {
+      title: 'Budget',
+      source: 'import_file',
+      file: { kind: 'sheet', fileUri: 'file:///b.xlsx', mimeType: null, originalName: 'Budget.xlsx', sizeBytes: 10 },
+    });
+    expect(sheet.kind).toBe('sheet');
   });
 });

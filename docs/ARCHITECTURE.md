@@ -9,7 +9,7 @@ Date: 2026-09-25 · Status: **approved; Phase 2 in progress**
 | Brand | **Docuna** ("doc" + *una*, "one": one app for all your documents). Almost no namespace collisions (no Play Store app with that name); `docuna.app` and `docuna.io` unregistered; `docuna.com` parked for sale |
 | Play Store title (≤30 chars) | **Docuna: PDF Scanner & OCR**, putting the two highest-volume keywords in the title, which carries the most ASO weight |
 | Short description (≤80 chars) | *Scan to PDF, edit & search documents offline. No watermark, no account.* |
-| Android package | `com.varietytech.docuna` (publisher: Variety Tech, variety-tech.com). **Permanent once published** |
+| Android package | `com.variety_tech.docuna` (publisher: Variety Tech, variety-tech.com). **Permanent once published** |
 | Backend | **Supabase**: Edge Functions (Deno) as the AI gateway + Postgres for usage/entitlements + Supabase Auth **anonymous sign-in** (no account) |
 | Billing | **expo-iap + our own Google Play verification** in an Edge Function. No revenue share and no third-party vendor; the cheapest option long-term. RevenueCat was rejected (1% of revenue above $2.5k MTR) |
 | Styling | **NativeWind v4** (stable, Tailwind 3.4). Compatibility with RN 0.86 / Reanimated 4 is verified at install time |

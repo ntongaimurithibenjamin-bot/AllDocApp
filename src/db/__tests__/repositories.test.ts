@@ -239,3 +239,21 @@ describe('settings', () => {
     expect(await settings.getSetting(db, 'autoExportDirectoryUri')).toBeNull();
   });
 });
+
+describe('inbox ("Recently scanned")', () => {
+  it('only receives scans unless the caller says otherwise', async () => {
+    const scan = await documents.createDocument(db, { title: 'Scan', source: 'scan' });
+    const pdf = await documents.createDocument(db, {
+      title: 'Lease',
+      source: 'import_pdf',
+      file: { kind: 'pdf', fileUri: 'file:///x.pdf', mimeType: 'application/pdf', originalName: 'x.pdf', sizeBytes: 1 },
+    });
+    const opened = await documents.createDocument(db, { title: 'Photo', source: 'import_image' });
+    const scannedPhotos = await documents.createDocument(db, { title: 'Photos', source: 'import_image', inInbox: true });
+
+    const inbox = (await documents.listDocuments(db, { inboxOnly: true })).map((d) => d.id).sort();
+    expect(inbox).toEqual([scan.id, scannedPhotos.id].sort());
+    expect(inbox).not.toContain(pdf.id);
+    expect(inbox).not.toContain(opened.id);
+  });
+});

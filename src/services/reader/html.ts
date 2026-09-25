@@ -2,7 +2,7 @@
  * HTML for the in-app reader WebView (scanned pages and text files). PDFs use the bundled PDF.js
  * viewer instead. Both speak the same bridge protocol (see reader-web/pdf/docuna.js):
  *   app → page:  window.docuna.{goToPage, find, clearFind, setZoom, setNight}
- *   page → app:  {type: 'loaded' | 'page' | 'progress' | 'find' | 'error', ...}
+ *   page → app:  {type: 'loaded' | 'page' | 'progress' | 'zoom' | 'tap' | 'find' | 'error', ...}
  */
 
 export interface ReaderPage {
@@ -45,6 +45,27 @@ const BRIDGE_JS = `
       queued = true;
       requestAnimationFrame(function () { queued = false; fn(); });
     };
+  }
+
+  // Single tap (not on a link or while selecting text) toggles the app's controls. A second tap
+  // within 280 ms is a double-tap (zoom) and cancels the toggle.
+  var tapTimer = null;
+  document.addEventListener('click', function (event) {
+    var target = event.target;
+    if (target && target.closest && target.closest('a, button, input, textarea, select, [role="button"]')) return;
+    var selection = window.getSelection && window.getSelection();
+    if (selection && String(selection).length > 0) return;
+    if (tapTimer) { clearTimeout(tapTimer); tapTimer = null; return; }
+    tapTimer = setTimeout(function () { tapTimer = null; post({ type: 'tap' }); }, 280);
+  }, true);
+
+  // Pinch-zoom level (100% = fit), reported while it changes.
+  if (window.visualViewport) {
+    var lastZoom = 100;
+    window.visualViewport.addEventListener('resize', throttleFrame(function () {
+      var zoom = Math.round(window.visualViewport.scale * 100);
+      if (zoom !== lastZoom) { lastZoom = zoom; post({ type: 'zoom', percent: zoom }); }
+    }));
   }
 `;
 
