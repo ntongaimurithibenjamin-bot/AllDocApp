@@ -14,6 +14,7 @@ import type { Document } from '@/domain/models';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useDb, useDbQuery } from '@/hooks/useDbQuery';
 import { useDocumentActions } from '@/hooks/useDocumentActions';
+import { goBack } from '@/lib/navigation';
 
 const openDocument = (document: Document) => router.push(`/document/${document.id}/read`);
 
@@ -35,13 +36,13 @@ export default function FolderScreen() {
   const rename = useAsyncAction((name: string) => renameFolder(db, id, name));
   const remove = useAsyncAction(async () => {
     await deleteFolder(db, id);
-    router.back();
+    goBack();
   });
 
   if (error) return <ErrorView error={error} onRetry={refresh} />;
   if (loading && !data) return null;
   if (!data) {
-    return <EmptyState icon="folder-remove-outline" title="Folder not found" actionLabel="Go back" onAction={() => router.back()} />;
+    return <EmptyState icon="folder-remove-outline" title="Folder not found" actionLabel="Go back" onAction={() => goBack()} />;
   }
 
   const { folder, documents } = data;

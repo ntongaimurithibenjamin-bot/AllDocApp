@@ -9,6 +9,9 @@ export type AppErrorCode =
   | 'scanner_unavailable'
   | 'native_unavailable'
   | 'unsupported_file'
+  | 'pdf_encrypted'
+  | 'pdf_invalid'
+  | 'file_too_large'
   | 'unknown';
 
 const USER_MESSAGES: Record<AppErrorCode, string> = {
@@ -22,6 +25,9 @@ const USER_MESSAGES: Record<AppErrorCode, string> = {
   scanner_unavailable: 'The scanner could not start. Make sure Google Play services is up to date, or add pages from your photos instead.',
   native_unavailable: 'This feature needs the full Docuna app and is not available in this preview.',
   unsupported_file: 'Docuna can’t open this type of file yet.',
+  pdf_encrypted: 'This PDF is password-protected, so it can’t be changed. Open it, remove the password, and try again.',
+  pdf_invalid: 'This PDF looks damaged, so it can’t be changed.',
+  file_too_large: 'This file is too large to edit on this phone.',
   unknown: 'Something went wrong. Please try again.',
 };
 

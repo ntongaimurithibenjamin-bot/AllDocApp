@@ -32,7 +32,22 @@ export interface IncomingFile {
   mimeType: string | null;
 }
 
+export interface NativeOcrResult {
+  text: string;
+  /** Lines with [left, top, width, height] boxes as fractions of the page. */
+  lines: { text: string; box: [number, number, number, number] }[];
+  /** Mean line confidence 0–1. */
+  confidence: number;
+}
+
 interface DocunaNativeModule {
+  /**
+   * On-device OCR (ML Kit, Latin script). Rejects with ERR_OCR_UNAVAILABLE while Google Play
+   * services is still downloading the model (a download is requested automatically).
+   */
+  recognizeTextAsync(imageUri: string): Promise<NativeOcrResult>;
+  /** OCR of one rendered PDF page; also rejects with ERR_PDF_ENCRYPTED / ERR_PDF_OPEN. */
+  recognizePdfPageTextAsync(pdfUri: string, pageIndex: number): Promise<NativeOcrResult>;
   addListener(event: 'onIncomingFiles', listener: (event: { files: IncomingFile[] }) => void): EventSubscription;
   getContentInfoAsync(uri: string): Promise<{ name: string | null; size: number | null; mimeType: string | null }>;
   /** Copies a content:// file into app storage; resolves with the byte count. */
@@ -42,6 +57,12 @@ interface DocunaNativeModule {
   scanDocumentAsync(options: { pageLimit?: number; allowGalleryImport?: boolean }): Promise<{ pageUris: string[] } | null>;
   getImageInfoAsync(uri: string): Promise<{ width: number; height: number }>;
   processImageAsync(options: ProcessImageOptions): Promise<ImageResult>;
+  /** Page sizes in PDF points (1/72 inch). */
+  getPdfPageSizesAsync(uri: string): Promise<{ width: number; height: number }[]>;
+  /** Saves into Downloads/Docuna; rejects with ERR_NEEDS_PICKER on Android 9 and older. */
+  saveToDownloadsAsync(sourceUri: string, displayName: string, mimeType: string): Promise<string>;
+  /** Streams a file into a content:// destination (e.g. a file created in a folder the user picked). */
+  copyToContentUriAsync(sourceUri: string, destinationUri: string): Promise<void>;
   /** Rejects with ERR_PDF_ENCRYPTED for password-protected PDFs, ERR_PDF_OPEN for unreadable ones. */
   getPdfInfoAsync(uri: string): Promise<{ pageCount: number }>;
   renderPdfPageAsync(options: {

@@ -21,6 +21,8 @@ dependencies {
   // On-device document scanner (edge detection, auto-capture, crop, filters). The scanner UI and
   // model are delivered by Google Play services, so the APK cost is small.
   implementation 'com.google.android.gms:play-services-mlkit-document-scanner:16.0.0'
+  // On-device OCR (Text Recognition v2, Latin). Model delivered by Play services: ~260 KB in the APK.
+  implementation 'com.google.android.gms:play-services-mlkit-text-recognition:19.0.1'
   // Correct orientation for camera/gallery JPEGs.
   implementation 'androidx.exifinterface:exifinterface:1.4.2'
 }

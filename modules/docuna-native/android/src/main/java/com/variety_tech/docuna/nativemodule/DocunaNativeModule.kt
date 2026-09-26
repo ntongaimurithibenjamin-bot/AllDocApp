@@ -125,6 +125,22 @@ class DocunaNativeModule : Module() {
       if (files.isNotEmpty()) sendEvent("onIncomingFiles", mapOf("files" to files))
     }
 
+    AsyncFunction("getPdfPageSizesAsync") { uri: String -> PdfPageRenderer.pageSizes(context, uri) }
+
+    AsyncFunction("saveToDownloadsAsync") { sourceUri: String, displayName: String, mimeType: String ->
+      ExportFiles.saveToDownloads(context, sourceUri, displayName, mimeType)
+    }
+
+    AsyncFunction("copyToContentUriAsync") { sourceUri: String, destinationUri: String ->
+      ExportFiles.copyToContentUri(context, sourceUri, destinationUri)
+    }
+
+    AsyncFunction("recognizeTextAsync") { uri: String -> OcrEngine.recognizeImage(context, uri) }
+
+    AsyncFunction("recognizePdfPageTextAsync") { uri: String, pageIndex: Int ->
+      OcrEngine.recognizePdfPage(context, uri, pageIndex)
+    }
+
     AsyncFunction("renderPdfPageAsync") { options: RenderPdfPageOptions ->
       val result = PdfPageRenderer.renderPage(context, options)
       mapOf("uri" to result.uri, "width" to result.width, "height" to result.height)

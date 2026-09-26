@@ -15,6 +15,7 @@ import { Button } from '@/components/Button';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorView } from '@/components/ErrorView';
 import { Icon, type IconName } from '@/components/Icon';
+import { useOverlay } from '@/components/overlay/OverlayProvider';
 import { PromptDialog } from '@/components/PromptDialog';
 import { GlassSheet } from '@/components/glass/GlassSheet';
 import { GlassDivider, GlassList, GlassRow, GlassTile, GlassTileRow } from '@/components/glass/GlassItems';
@@ -25,10 +26,11 @@ import { getSetting, setSetting } from '@/db/repositories/settings';
 import { AppError, toAppError } from '@/domain/errors';
 import { fileExtension } from '@/domain/fileTypes';
 import { OFFICE_KINDS, type Document, type Page } from '@/domain/models';
+import { isPdfCapable } from '@/domain/pdfTools';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useDb, useDbQuery } from '@/hooks/useDbQuery';
-import { openInAnotherApp } from '@/services/files/openExternal';
-import { shareDocumentFile } from '@/services/files/shareFile';
+import { goBack } from '@/lib/navigation';
+import { openInAnotherApp, saveToDownloads, saveToFolder, shareDocument, type SaveResult } from '@/services/files/exportFile';
 import { buildPagesHtml, buildTextHtml, MAX_TEXT_BYTES } from '@/services/reader/html';
 import { useTheme } from '@/theme';
 
@@ -100,9 +102,11 @@ function HeaderButton({ icon, label, onPress, active = false }: { icon: IconName
 }
 
 export default function ReaderScreen() {
-  const { id, page: pageParam } = useLocalSearchParams<{ id: string; page?: string }>();
+  // `q`: opened from a search result; the match is highlighted where the reader has a text layer.
+  const { id, page: pageParam, q: queryParam } = useLocalSearchParams<{ id: string; page?: string; q?: string }>();
   const db = useDb();
   const { colors } = useTheme();
+  const { showToast } = useOverlay();
   const webview = useRef<WebView>(null);
   // The document area; glass sheets blur whatever it shows.
   const blurTarget = useRef<View>(null);
@@ -213,6 +217,7 @@ export default function ReaderScreen() {
 
   const document = data?.document;
   const kind = document?.kind;
+  const exportable = Boolean(document?.fileUri) || (kind === 'pages' && (data?.pages.length ?? 0) > 0);
   const paged = kind === 'pdf' || kind === 'pages' || kind === 'slides';
   const searchable = kind === 'pdf' || kind === 'text' || kind === 'word' || kind === 'sheet' || kind === 'slides';
   const bookmarked = (bookmarks.data ?? []).some((b) => b.pageIndex === page - 1);
@@ -227,6 +232,10 @@ export default function ReaderScreen() {
     switch (message.type) {
       case 'loaded':
         setLoaded(true);
+        if (queryParam && searchable) {
+          setSearch({ open: true, query: queryParam, current: 0, total: 0, pending: true });
+          run(`window.docuna.find(${JSON.stringify(queryParam)}, false)`);
+        }
         if (message.pageCount > 0) {
           setPageCountState(message.pageCount);
           if (document && message.pageCount !== document.pageCount && (kind === 'pdf' || kind === 'slides')) {
@@ -300,11 +309,21 @@ export default function ReaderScreen() {
   });
 
   const share = useAsyncAction(async () => {
-    if (document) await shareDocumentFile(document);
+    if (document) await shareDocument(db, document);
   });
 
   const openExternally = useAsyncAction(async () => {
-    if (document) await openInAnotherApp(document);
+    if (document) await openInAnotherApp(db, document);
+  });
+
+  const reportSaved = (result: SaveResult) => {
+    if (result.saved) showToast({ message: 'Saved to ' + result.location });
+  };
+  const download = useAsyncAction(async () => {
+    if (document) reportSaved(await saveToDownloads(db, document));
+  });
+  const saveAs = useAsyncAction(async () => {
+    if (document) reportSaved(await saveToFolder(db, document));
   });
 
   const toggleKeepAwake = useAsyncAction(async () => {
@@ -359,7 +378,7 @@ export default function ReaderScreen() {
             onPress={() => applyZoom(zoom === 'page-fit' ? 'page-width' : 'page-fit')}
           />
         ) : null}
-        {document.fileUri ? (
+        {exportable ? (
           <GlassTile icon="share-variant-outline" label="Share" onPress={() => closeThen(() => share.run())} />
         ) : null}
       </GlassTileRow>
@@ -374,8 +393,28 @@ export default function ReaderScreen() {
           onPress={() => setSheet('bookmarks')}
         />
       ) : null}
-      {document.fileUri ? (
-        <GlassRow icon="open-in-app" label="Open in another app" onPress={() => closeThen(() => openExternally.run())} />
+      {exportable ? (
+        <>
+          <GlassRow icon="download-outline" label="Save to Downloads" onPress={() => closeThen(() => download.run())} />
+          <GlassRow icon="folder-download-outline" label="Save to…" onPress={() => closeThen(() => saveAs.run())} />
+          <GlassRow icon="open-in-app" label="Open in another app" onPress={() => closeThen(() => openExternally.run())} />
+        </>
+      ) : null}
+      {isPdfCapable(document) ? (
+        <GlassRow
+          icon="file-cog-outline"
+          label="PDF tools"
+          detail="Merge, extract, compress"
+          onPress={() => closeThen(() => router.push({ pathname: '/tools', params: { documentId: id } }))}
+        />
+      ) : null}
+      {kind === 'pages' || kind === 'pdf' || kind === 'text' ? (
+        <GlassRow
+          icon="text-recognition"
+          label="Text"
+          detail="Copy or share the words on the pages"
+          onPress={() => closeThen(() => router.push(`/document/${id}/text`))}
+        />
       ) : null}
       {kind === 'pages' ? <GlassRow icon="file-edit-outline" label="Edit pages" onPress={() => closeThen(() => router.push(`/document/${id}/pages`))} /> : null}
       <GlassRow icon="information-outline" label="Document details" onPress={() => closeThen(() => router.push(`/document/${id}`))} />
@@ -389,7 +428,7 @@ export default function ReaderScreen() {
     return <>{plainHeader}<ErrorView error={sourceError} onRetry={() => router.replace(`/document/${id}/read`)} /></>;
   }
   if (data === null) {
-    return <>{plainHeader}<EmptyState icon="file-hidden" title="Document not found" actionLabel="Go back" onAction={() => router.back()} /></>;
+    return <>{plainHeader}<EmptyState icon="file-hidden" title="Document not found" actionLabel="Go back" onAction={() => goBack()} /></>;
   }
   if (document && (kind === 'other' || renderFailed)) {
     const extension = fileExtension(document.originalName ?? '').toUpperCase();
@@ -518,7 +557,7 @@ export default function ReaderScreen() {
             style={{ paddingTop: insets.top }}
           >
             <View className="h-14 flex-row items-center pl-2 pr-1">
-              <HeaderButton icon="arrow-left" label="Back" onPress={() => router.back()} />
+              <HeaderButton icon="arrow-left" label="Back" onPress={() => goBack()} />
               <Text numberOfLines={1} className="ml-2 flex-1 text-lg font-semibold text-text">
                 {document?.title ?? ''}
               </Text>

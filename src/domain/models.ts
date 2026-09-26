@@ -1,3 +1,5 @@
+import type { DocumentSuggestion } from './suggestions';
+
 export type DocumentSource = 'scan' | 'import_pdf' | 'import_image' | 'import_file';
 
 /**
@@ -36,6 +38,10 @@ export interface Document {
   lastReadPage: number;
   /** When the document was last opened in the reader. */
   lastOpenedAt: number | null;
+  /** Text recognition progress for file documents (PDF, text); scans track it per page. */
+  ocrState: OcrStatus;
+  /** Rule-based filing suggestion from the recognised text (inbox). */
+  suggestion: DocumentSuggestion | null;
   createdAt: number;
   updatedAt: number;
   deletedAt: number | null;
@@ -123,7 +129,10 @@ export interface DocumentQuery {
 export interface SearchHit {
   documentId: string;
   title: string;
-  /** Page number (1-based) when the hit came from page text; null for title matches. */
+  kind: DocumentKind;
+  /** Page number (1-based) of the best page-text hit; null for title matches. */
   pageNumber: number | null;
   snippet: string | null;
+  /** How many pages of the document match. */
+  pageMatches: number;
 }

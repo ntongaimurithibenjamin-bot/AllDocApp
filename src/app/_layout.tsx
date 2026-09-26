@@ -4,16 +4,16 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider, type ErrorBoundaryProps 
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { Suspense, useEffect, useMemo } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { AppState, Pressable, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { IncomingFilesHandler } from '@/components/IncomingFilesHandler';
 import { OverlayProvider } from '@/components/overlay/OverlayProvider';
 import { DatabaseProvider, useDatabase } from '@/db/DatabaseProvider';
-import { getSetting } from '@/db/repositories/settings';
 import { toAppError } from '@/domain/errors';
-import { applyThemePreference } from '@/services/appearance';
+import { markAppLeft, restoreAppearance, rotateThemeIfAway } from '@/services/appearance';
 import { purgeExpiredTrash } from '@/services/documents/lifecycle';
+import { startOcrQueue } from '@/services/ocr/queue';
 import { repairPdfThumbnails } from '@/services/pdf';
 import { useTheme } from '@/theme';
 
@@ -39,8 +39,7 @@ function AppShell() {
 
   useEffect(() => {
     // Apply the saved theme before the splash screen hides, so the first frame is already right.
-    getSetting(db, 'themePreference')
-      .then(applyThemePreference)
+    restoreAppearance(db)
       .catch(() => {})
       .finally(() => SplashScreen.hideAsync().catch(() => {}));
     // Housekeeping must never block startup.
@@ -49,6 +48,22 @@ function AppShell() {
       .catch((error: unknown) => {
         if (__DEV__) console.warn('Startup housekeeping failed', error);
       });
+  }, [db]);
+
+  // Background text recognition (one page at a time, foreground only).
+  useEffect(() => startOcrQueue(db), [db]);
+
+  useEffect(() => {
+    // Theme rotation: note when Docuna leaves the foreground; on return, move to the next theme
+    // if it was away 5+ minutes. Never changes colours while the app is on screen.
+    let current = AppState.currentState;
+    const subscription = AppState.addEventListener('change', (next) => {
+      const task =
+        next === 'background' && current !== 'background' ? markAppLeft(db) : next === 'active' && current !== 'active' ? rotateThemeIfAway(db) : null;
+      current = next;
+      task?.catch(() => {});
+    });
+    return () => subscription.remove();
   }, [db]);
 
   const navigationTheme = useMemo(() => {
@@ -86,10 +101,16 @@ function AppShell() {
           <Stack.Screen name="document/[id]/index" options={{ title: '' }} />
           <Stack.Screen name="document/[id]/read" options={{ title: '' }} />
           <Stack.Screen name="document/[id]/pages" options={{ title: 'Pages' }} />
+          <Stack.Screen name="document/[id]/text" options={{ title: 'Text' }} />
           <Stack.Screen name="document/[id]/page/[pageId]/index" options={{ title: '' }} />
           <Stack.Screen name="document/[id]/page/[pageId]/crop" options={{ title: 'Crop', presentation: 'fullScreenModal' }} />
           <Stack.Screen name="document/[id]/move" options={{ title: 'Move to folder', presentation: 'modal' }} />
           <Stack.Screen name="folders/[id]" options={{ title: '' }} />
+          <Stack.Screen name="tools/index" options={{ title: 'PDF tools' }} />
+          <Stack.Screen name="tools/merge" options={{ title: 'Merge' }} />
+          <Stack.Screen name="tools/pick" options={{ title: 'Choose a document' }} />
+          <Stack.Screen name="tools/pages" options={{ title: '' }} />
+          <Stack.Screen name="tools/compress" options={{ title: 'Compress' }} />
           <Stack.Screen name="inbox" options={{ title: 'Inbox' }} />
           <Stack.Screen name="trash" options={{ title: 'Trash' }} />
           <Stack.Screen name="settings/storage" options={{ title: 'Storage' }} />

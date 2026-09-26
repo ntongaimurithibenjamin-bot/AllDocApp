@@ -51,6 +51,23 @@ export function documentSourceFile(documentId: string, extension: string): File 
   return new File(documentDirectory(documentId), `source.${extension}`);
 }
 
+/**
+ * A new, uniquely named file in a document's folder (e.g. a regenerated PDF), so viewers and
+ * caches never see a stale version.
+ */
+export function newDocumentFile(documentId: string, base: 'document' | 'source', extension: string): File {
+  versionCounter = (versionCounter + 1) % 1296;
+  return new File(documentDirectory(documentId), `${base}-${Date.now().toString(36)}${versionCounter.toString(36)}.${extension}`);
+}
+
+/** A scratch file for intermediate work (e.g. compressed page images); callers delete it. */
+export function newScratchFile(extension: string): File {
+  versionCounter = (versionCounter + 1) % 1296;
+  const dir = new Directory(Paths.cache, 'work');
+  dir.create({ intermediates: true, idempotent: true });
+  return new File(dir, `${Date.now().toString(36)}${versionCounter.toString(36)}.${extension}`);
+}
+
 /** A uniquely named document-level image (e.g. a PDF cover thumbnail). */
 export function newDocumentImageFile(documentId: string, kind: 'thumb'): File {
   versionCounter = (versionCounter + 1) % 1296;

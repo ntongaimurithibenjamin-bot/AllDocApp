@@ -58,6 +58,29 @@ object PdfPageRenderer {
 
   fun pageCount(context: Context, uri: String): Int = withRenderer(context, uri) { it.pageCount }
 
+  /** Each page's size in PDF points (1/72 inch), in page order. */
+  fun pageSizes(context: Context, uri: String): List<Map<String, Int>> = withRenderer(context, uri) { renderer ->
+    (0 until renderer.pageCount).map { index ->
+      renderer.openPage(index).use { page -> mapOf("width" to page.width, "height" to page.height) }
+    }
+  }
+
+  /** Renders one page to a white-backed bitmap whose longest edge is maxDimension. The caller owns it. */
+  fun renderBitmap(context: Context, uri: String, pageIndex: Int, maxDimension: Int): Bitmap = withRenderer(context, uri) { renderer ->
+    if (pageIndex !in 0 until renderer.pageCount) throw PdfOpenException("Page $pageIndex is out of range")
+    renderer.openPage(pageIndex).use { page ->
+      val scale = maxDimension.toFloat() / max(page.width, page.height)
+      val bitmap = Bitmap.createBitmap(
+        (page.width * scale).roundToInt().coerceAtLeast(1),
+        (page.height * scale).roundToInt().coerceAtLeast(1),
+        Bitmap.Config.ARGB_8888,
+      )
+      bitmap.eraseColor(Color.WHITE)
+      page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+      bitmap
+    }
+  }
+
   fun renderPage(context: Context, options: RenderPdfPageOptions): ProcessedImage = withRenderer(context, options.uri) { renderer ->
     if (options.pageIndex !in 0 until renderer.pageCount) throw PdfOpenException("Page ${options.pageIndex} is out of range")
     renderer.openPage(options.pageIndex).use { page ->

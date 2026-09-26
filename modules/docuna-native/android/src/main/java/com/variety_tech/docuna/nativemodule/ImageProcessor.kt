@@ -65,7 +65,7 @@ object ImageProcessor {
    * Longest edge we decode and process at. Peak memory is roughly two ARGB bitmaps of this size
    * (source + warped output): ~72 MB at 3000 px, ~32 MB at 2000 px.
    */
-  private fun maxWorkingDimension(context: Context): Int {
+  internal fun maxWorkingDimension(context: Context): Int {
     if (workingDimension == 0) {
       val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
       workingDimension =
@@ -129,7 +129,7 @@ object ImageProcessor {
     0
   }
 
-  private fun decodeOriented(context: Context, uri: String, maxDimension: Int): Bitmap {
+  internal fun decodeOriented(context: Context, uri: String, maxDimension: Int): Bitmap {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     open(context, uri).use { BitmapFactory.decodeStream(it, null, bounds) }
     if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw InvalidImageException("Not a readable image: $uri")

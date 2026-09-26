@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView } from 'react-native';
 
@@ -11,6 +11,7 @@ import { getDocument, moveDocument } from '@/db/repositories/documents';
 import { listFolders } from '@/db/repositories/folders';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useDb, useDbQuery } from '@/hooks/useDbQuery';
+import { goBack } from '@/lib/navigation';
 
 export default function MoveDocumentScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -25,7 +26,7 @@ export default function MoveDocumentScreen() {
 
   const move = useAsyncAction(async (folderId: string | null) => {
     await moveDocument(db, id, folderId);
-    router.back();
+    goBack();
   });
 
   if (error) return <ErrorView error={error} onRetry={refresh} />;

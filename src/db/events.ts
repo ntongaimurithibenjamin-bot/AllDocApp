@@ -1,4 +1,5 @@
-export type DataTopic = 'documents' | 'folders' | 'pages' | 'settings';
+/** 'ocr' = recognised text changed (search results, text screen, progress); kept apart from 'pages' so the reader doesn't reload while OCR runs. */
+export type DataTopic = 'documents' | 'folders' | 'pages' | 'settings' | 'ocr';
 
 type Listener = (topics: ReadonlySet<DataTopic>) => void;
 

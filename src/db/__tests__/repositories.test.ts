@@ -209,11 +209,13 @@ describe('search', () => {
     );
 
     const byTitle = await searchDocuments(db, 'rent');
-    expect(byTitle).toEqual([{ documentId: rent.id, title: 'Rent agreement', pageNumber: null, snippet: null }]);
+    expect(byTitle).toEqual([
+      { documentId: rent.id, title: 'Rent agreement', kind: 'pages', pageNumber: null, snippet: null, pageMatches: 0 },
+    ]);
 
     const byAmount = await searchDocuments(db, 'KSh 25,000');
     expect(byAmount).toHaveLength(1);
-    expect(byAmount[0]).toMatchObject({ documentId: invoice.id, pageNumber: 2 });
+    expect(byAmount[0]).toMatchObject({ documentId: invoice.id, pageNumber: 2, pageMatches: 1 });
     expect(byAmount[0]!.snippet).toContain('[KSh]');
 
     expect(await searchDocuments(db, 'univ')).toEqual([]);

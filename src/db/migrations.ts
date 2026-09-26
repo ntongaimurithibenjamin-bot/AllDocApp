@@ -282,6 +282,49 @@ CREATE TRIGGER documents_au AFTER UPDATE OF title ON documents BEGIN
 END;
 `,
   },
+  {
+    // OCR: text rows address either a scanned page (page_id, follows reordering) or a page number
+    // of a file (page_index, PDFs and text files). Documents track file OCR progress so the queue
+    // resumes where it stopped.
+    version: 6,
+    rebuildsTables: true,
+    sql: `
+CREATE TABLE ocr_pages_v6 (
+  id            INTEGER PRIMARY KEY,
+  document_id   TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  page_id       TEXT UNIQUE REFERENCES pages(id) ON DELETE CASCADE,
+  page_index    INTEGER,
+  text          TEXT NOT NULL,
+  blocks_json   TEXT,
+  language      TEXT,
+  engine        TEXT NOT NULL,
+  confidence    REAL,
+  processed_at  INTEGER NOT NULL,
+  UNIQUE (document_id, page_index),
+  CHECK ((page_id IS NULL) <> (page_index IS NULL))
+);
+INSERT INTO ocr_pages_v6 (id, document_id, page_id, text, blocks_json, language, engine, processed_at)
+SELECT rowid, document_id, page_id, text, blocks_json, language, engine, processed_at FROM ocr_pages;
+DROP TABLE ocr_pages;
+ALTER TABLE ocr_pages_v6 RENAME TO ocr_pages;
+CREATE INDEX idx_ocr_doc ON ocr_pages(document_id);
+CREATE TRIGGER ocr_pages_ai AFTER INSERT ON ocr_pages BEGIN
+  INSERT INTO ocr_fts(rowid, text) VALUES (new.rowid, new.text);
+END;
+CREATE TRIGGER ocr_pages_ad AFTER DELETE ON ocr_pages BEGIN
+  INSERT INTO ocr_fts(ocr_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
+END;
+CREATE TRIGGER ocr_pages_au AFTER UPDATE OF text ON ocr_pages BEGIN
+  INSERT INTO ocr_fts(ocr_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
+  INSERT INTO ocr_fts(rowid, text) VALUES (new.rowid, new.text);
+END;
+INSERT INTO ocr_fts(ocr_fts) VALUES ('rebuild');
+
+ALTER TABLE documents ADD COLUMN ocr_state TEXT NOT NULL DEFAULT 'pending';
+ALTER TABLE documents ADD COLUMN ocr_next_page INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX idx_documents_ocr ON documents(ocr_state) WHERE ocr_state = 'pending';
+`,
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

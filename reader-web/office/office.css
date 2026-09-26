@@ -21,6 +21,9 @@ mark.current { background: #ff9f1c; }
 .doc td, .doc th { border: 1px solid #c9cfd6; padding: 4px 8px; vertical-align: top; }
 .night .doc td, .night .doc th { border-color: #3a434f; }
 .doc h1, .doc h2, .doc h3 { font-family: sans-serif; line-height: 1.25; }
+.doc .doc-title { font-size: 1.7em; margin-top: 0; }
+.doc .doc-subtitle { font-family: sans-serif; font-size: 1.1em; color: #5b6573; }
+.night .doc .doc-subtitle { color: #9aa4b2; }
 
 /* Excel */
 #tabs { position: sticky; top: 0; z-index: 2; display: flex; gap: 6px; overflow-x: auto; padding: 8px; background: #dfe3e8; }
@@ -34,6 +37,7 @@ mark.current { background: #ff9f1c; }
 .night .sheet table { background: #151a21; }
 .sheet td { border: 1px solid #d0d5dc; padding: 3px 6px; white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
 .night .sheet td { border-color: #2a323d; }
+.sheet td[data-t="n"], .sheet td[data-t="d"] { text-align: right; font-variant-numeric: tabular-nums; }
 .sheet tr:first-child td { background: #f1f3f6; font-weight: 600; }
 .night .sheet tr:first-child td { background: #1e252e; }
 .empty { padding: 32px; text-align: center; color: #5b6573; }

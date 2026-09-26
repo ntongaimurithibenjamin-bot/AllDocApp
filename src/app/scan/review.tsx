@@ -15,6 +15,7 @@ import { listPages } from '@/db/repositories/pages';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useDb, useDbQuery } from '@/hooks/useDbQuery';
 import { pluralize } from '@/lib/format';
+import { goBack } from '@/lib/navigation';
 import { discardDocument } from '@/services/pages/pageService';
 import { useTheme } from '@/theme';
 
@@ -51,12 +52,12 @@ export default function ScanReviewScreen() {
 
   const discard = useAsyncAction(async () => {
     await discardDocument(db, documentId);
-    router.back();
+    goBack();
   });
 
   if (error) return <ErrorView error={error} onRetry={refresh} />;
   if (loading && !data) return null;
-  if (!data) return <EmptyState icon="file-hidden" title="Scan not found" actionLabel="Close" onAction={() => router.back()} />;
+  if (!data) return <EmptyState icon="file-hidden" title="Scan not found" actionLabel="Close" onAction={() => goBack()} />;
 
   const { document, pages, folders } = data;
 

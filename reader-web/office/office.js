@@ -150,7 +150,13 @@
   function renderWord(data) {
     return loadScript('mammoth.browser.min.js')
       .then(function () {
-        return window.mammoth.convertToHtml({ arrayBuffer: data });
+        return window.mammoth.convertToHtml(
+          { arrayBuffer: data },
+          {
+            // Word's built-in Title/Subtitle styles otherwise come out as plain paragraphs.
+            styleMap: ["p[style-name='Title'] => h1.doc-title:fresh", "p[style-name='Subtitle'] => p.doc-subtitle:fresh"],
+          },
+        );
       })
       .then(function (result) {
         var article = document.createElement('article');
@@ -165,6 +171,22 @@
 
   var workbook = null;
 
+  /**
+   * Files written by some tools store formulas without their last computed result; show the
+   * formula (e.g. "=SUM(C2:C6)") rather than an empty cell.
+   */
+  function showFormulasWithoutValues(sheet) {
+    Object.keys(sheet).forEach(function (address) {
+      if (address.charAt(0) === '!') return;
+      var cell = sheet[address];
+      if (cell && cell.f && (cell.t === 'z' || cell.v === undefined || cell.v === null || cell.v === '')) {
+        cell.t = 's';
+        cell.v = '=' + cell.f;
+        cell.w = '=' + cell.f;
+      }
+    });
+  }
+
   function showSheet(index) {
     var name = workbook.SheetNames[index];
     var sheet = workbook.Sheets[name];
@@ -172,6 +194,7 @@
     var wrapper = document.createElement('div');
     wrapper.className = 'sheet';
     var hasCells = sheet && sheet['!ref'];
+    if (hasCells) showFormulasWithoutValues(sheet);
     if (hasCells) {
       // sheet_to_html escapes cell text; the CSP stops anything executable regardless.
       wrapper.innerHTML = window.XLSX.utils.sheet_to_html(sheet, { header: '', footer: '', editable: false });
@@ -189,7 +212,7 @@
 
   function renderSheet(data) {
     return loadScript('xlsx.full.min.js').then(function () {
-      workbook = window.XLSX.read(data, { type: 'array', sheetRows: MAX_SHEET_ROWS + 1, cellDates: true });
+      workbook = window.XLSX.read(data, { type: 'array', sheetRows: MAX_SHEET_ROWS + 1, cellDates: true, sheetStubs: true });
       pageCount = workbook.SheetNames.length;
       pageMode = 'sheets';
       var truncated = workbook.SheetNames.some(function (name) {

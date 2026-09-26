@@ -7,7 +7,8 @@ import { useOverlay, type OverlayAction } from '@/components/overlay/OverlayProv
 import { renameDocument, restoreDocument, setFavorite, trashDocument } from '@/db/repositories/documents';
 import { toAppError } from '@/domain/errors';
 import type { Document } from '@/domain/models';
-import { shareDocumentFile } from '@/services/files/shareFile';
+import { isPdfCapable } from '@/domain/pdfTools';
+import { saveToDownloads, shareDocument } from '@/services/files/exportFile';
 
 import { useDb } from './useDbQuery';
 
@@ -66,8 +67,38 @@ export function useDocumentActions() {
         },
         { key: 'move', label: 'Move to folder', icon: 'folder-move-outline', onPress: () => router.push(`/document/${document.id}/move`) },
       ];
-      if (document.fileUri) {
-        actions.push({ key: 'share', label: 'Share', icon: 'share-variant-outline', onPress: () => shareDocumentFile(document).catch(report) });
+      const exportable = document.fileUri !== null || (document.kind === 'pages' && document.pageCount > 0);
+      if (exportable) {
+        actions.push(
+          { key: 'share', label: 'Share', icon: 'share-variant-outline', onPress: () => shareDocument(db, document).catch(report) },
+          {
+            key: 'download',
+            label: 'Save to Downloads',
+            icon: 'download-outline',
+            onPress: () =>
+              saveToDownloads(db, document)
+                .then((result) => {
+                  if (result.saved) showToast({ message: `Saved to ${result.location}` });
+                })
+                .catch(report),
+          },
+        );
+      }
+      if (isPdfCapable(document)) {
+        actions.push({
+          key: 'tools',
+          label: 'PDF tools',
+          icon: 'file-cog-outline',
+          onPress: () => router.push({ pathname: '/tools', params: { documentId: document.id } }),
+        });
+      }
+      if (document.kind === 'pages' || document.kind === 'pdf' || document.kind === 'text') {
+        actions.push({
+          key: 'text',
+          label: 'Text',
+          icon: 'text-recognition',
+          onPress: () => router.push(`/document/${document.id}/text`),
+        });
       }
       actions.push(
         { key: 'details', label: 'Details', icon: 'information-outline', onPress: () => router.push(`/document/${document.id}`) },
@@ -75,7 +106,7 @@ export function useDocumentActions() {
       );
       showActions({ title: document.title, actions });
     },
-    [db, showActions, showPrompt, trashWithUndo],
+    [db, showActions, showPrompt, showToast, trashWithUndo],
   );
 
   return { openActions, trashWithUndo };

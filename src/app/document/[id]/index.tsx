@@ -24,6 +24,7 @@ import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useDb, useDbQuery } from '@/hooks/useDbQuery';
 import { useDocumentActions } from '@/hooks/useDocumentActions';
 import { formatBytes, formatRelativeTime, pluralize } from '@/lib/format';
+import { goBack } from '@/lib/navigation';
 
 export default function DocumentScreen() {
   const { trashWithUndo } = useDocumentActions();
@@ -59,7 +60,7 @@ export default function DocumentScreen() {
         title="Document not found"
         body="It may have been deleted."
         actionLabel="Go back"
-        onAction={() => router.back()}
+        onAction={() => goBack()}
       />
     );
   }
@@ -67,7 +68,7 @@ export default function DocumentScreen() {
   const { document, pages, folder } = data;
 
   const moveToTrash = () => {
-    router.back();
+    goBack();
     void trashWithUndo(document);
   };
 

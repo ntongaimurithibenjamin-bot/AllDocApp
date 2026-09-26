@@ -8,6 +8,7 @@ import { Icon } from '@/components/Icon';
 import { toAppError, type AppError } from '@/domain/errors';
 import { defaultScanTitle } from '@/domain/validation';
 import { useDb } from '@/hooks/useDbQuery';
+import { goBack } from '@/lib/navigation';
 import { createDocumentFromImages, importImagesIntoDocument, replacePageImage } from '@/services/pages/pageService';
 import {
   captureWithCamera,
@@ -47,12 +48,12 @@ export default function ScanScreen() {
     if (params.replacePageId) {
       await replacePageImage(db, params.replacePageId, uris[0]!);
       succeeded();
-      router.back();
+      goBack();
     } else if (params.documentId) {
       const at = params.at !== undefined ? Number(params.at) : undefined;
       await importImagesIntoDocument(db, params.documentId, uris, { atPosition: at, onProgress });
       succeeded();
-      router.back();
+      goBack();
     } else {
       const document = await createDocumentFromImages(db, uris, {
         title: defaultScanTitle(),
@@ -76,7 +77,7 @@ export default function ScanScreen() {
             : await pickImages({ multiple: !replacing });
       if (!uris) {
         // Cancelled: leave the flow if the scanner opened automatically, else stay on the choices.
-        if (source === 'scanner') router.back();
+        if (source === 'scanner') goBack();
         else setState({ phase: 'choose', availability });
         return;
       }
@@ -151,7 +152,7 @@ export default function ScanScreen() {
               onPress={() => capture('photos', availability)}
             />
           ) : null}
-          <Button label="Cancel" variant="ghost" onPress={() => router.back()} />
+          <Button label="Cancel" variant="ghost" onPress={() => goBack()} />
         </View>
       </View>
     </ScrollView>

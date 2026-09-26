@@ -1,4 +1,5 @@
 import type { ThemePreference } from '@/theme';
+import paletteModule from '@/theme/palette';
 
 import { notifyChanged } from '../events';
 import type { SqlDb } from '../types';
@@ -6,12 +7,20 @@ import type { SqlDb } from '../types';
 /** Every persisted setting, with its type and default. Add new settings here only. */
 const DEFAULTS = {
   themePreference: 'system' as ThemePreference,
+  /** Active colour theme (see src/theme/palette.js). */
+  themeId: paletteModule.themes[0].id as string,
+  /** Move to the next theme after the app has been away for 5+ minutes. */
+  themeAutoRotate: true,
+  /** When the app last went to the background (ms), for theme rotation; null once handled. */
+  themeLeftAt: null as number | null,
   /** SAF directory URI where saved PDFs are mirrored; null = off. */
   autoExportDirectoryUri: null as string | null,
   analyticsEnabled: true,
   readerNightMode: false,
   /** Keep the screen on while a document is open in the reader. */
   readerKeepAwake: true,
+  /** Recognise text in scans and PDFs on the device so they can be searched. */
+  ocrEnabled: true,
 };
 
 export type Settings = typeof DEFAULTS;

@@ -1,7 +1,5 @@
 import { shareFileName } from '../shareFile';
 
-jest.mock('expo-sharing', () => ({}));
-jest.mock('expo-file-system', () => ({}));
 
 describe('shareFileName', () => {
   it('uses the document title with the original extension', () => {

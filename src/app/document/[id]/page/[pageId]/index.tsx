@@ -14,6 +14,7 @@ import type { PageFilter } from '@/domain/models';
 import { PAGE_FILTERS, rotateBy } from '@/domain/pageEdits';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useDb, useDbQuery } from '@/hooks/useDbQuery';
+import { goBack } from '@/lib/navigation';
 import { deletePagesWithFiles, duplicatePage, editPage } from '@/services/pages/pageService';
 import { useTheme } from '@/theme';
 
@@ -49,7 +50,7 @@ export default function PageEditorScreen() {
   const remove = useAsyncAction(async (nextPageId: string | null) => {
     await deletePagesWithFiles(db, id, [pageId]);
     if (nextPageId) router.setParams({ pageId: nextPageId });
-    else router.back();
+    else goBack();
   });
 
   if (error) return <ErrorView error={error} onRetry={refresh} />;
@@ -58,7 +59,7 @@ export default function PageEditorScreen() {
   const index = pages.findIndex((page) => page.id === pageId);
   const page = pages[index];
   if (!page) {
-    return <EmptyState icon="file-hidden" title="Page not found" actionLabel="Go back" onAction={() => router.back()} />;
+    return <EmptyState icon="file-hidden" title="Page not found" actionLabel="Go back" onAction={() => goBack()} />;
   }
 
   const busy = edit.pending || duplicate.pending || remove.pending;

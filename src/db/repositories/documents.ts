@@ -1,5 +1,6 @@
 import { AppError } from '@/domain/errors';
-import type { Document, DocumentKind, DocumentQuery, DocumentSource } from '@/domain/models';
+import type { Document, DocumentKind, DocumentQuery, DocumentSource, OcrStatus } from '@/domain/models';
+import type { DocumentSuggestion } from '@/domain/suggestions';
 import { normalizeName } from '@/domain/validation';
 import { newId } from '@/lib/id';
 
@@ -25,9 +26,20 @@ interface DocumentRow {
   in_inbox: number;
   last_read_page: number;
   last_opened_at: number | null;
+  ocr_state: OcrStatus;
+  suggested_json: string | null;
   created_at: number;
   updated_at: number;
   deleted_at: number | null;
+}
+
+function parseSuggestion(json: string | null): DocumentSuggestion | null {
+  if (!json) return null;
+  try {
+    return JSON.parse(json) as DocumentSuggestion;
+  } catch {
+    return null;
+  }
 }
 
 function toDocument(row: DocumentRow): Document {
@@ -50,6 +62,8 @@ function toDocument(row: DocumentRow): Document {
     inInbox: row.in_inbox === 1,
     lastReadPage: row.last_read_page,
     lastOpenedAt: row.last_opened_at,
+    ocrState: row.ocr_state,
+    suggestion: parseSuggestion(row.suggested_json),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
@@ -205,6 +219,30 @@ export async function setPageCount(db: SqlDb, id: string, pageCount: number): Pr
   if (result.changes > 0) notifyChanged('documents');
 }
 
+/** Records the generated PDF of a page-image document (a cache: not an edit, so no updated_at). */
+export async function setDocumentPdf(db: SqlDb, id: string, pdfUri: string): Promise<void> {
+  await db.runAsync('UPDATE documents SET pdf_uri = ?, pdf_stale = 0 WHERE id = ?', pdfUri, id);
+}
+
+/** Replaces a file document's stored file after an edit (e.g. rotated pages). */
+export async function updateDocumentFile(
+  db: SqlDb,
+  id: string,
+  file: { fileUri: string; sizeBytes: number; pageCount: number; thumbnailUri: string | null },
+): Promise<void> {
+  const result = await db.runAsync(
+    'UPDATE documents SET file_uri = ?, size_bytes = ?, page_count = ?, thumbnail_uri = ?, updated_at = ? WHERE id = ?',
+    file.fileUri,
+    file.sizeBytes,
+    file.pageCount,
+    file.thumbnailUri,
+    Date.now(),
+    id,
+  );
+  if (result.changes === 0) throw new AppError('not_found', `Document ${id} not found`);
+  notifyChanged('documents');
+}
+
 /** Sets a file document's cover thumbnail (and page count, if it was unknown). */
 export async function setDocumentCover(db: SqlDb, id: string, thumbnailUri: string, pageCount: number): Promise<void> {
   await db.runAsync('UPDATE documents SET thumbnail_uri = ?, page_count = ? WHERE id = ?', thumbnailUri, pageCount, id);
@@ -260,4 +298,10 @@ export async function countDocuments(db: SqlDb): Promise<number> {
     'SELECT COUNT(*) AS n FROM documents WHERE deleted_at IS NULL',
   );
   return row?.n ?? 0;
+}
+
+/** Stores (or clears) the inbox filing suggestion. Not an edit, so updated_at is unchanged. */
+export async function setDocumentSuggestion(db: SqlDb, id: string, suggestion: DocumentSuggestion | null): Promise<void> {
+  await db.runAsync('UPDATE documents SET suggested_json = ? WHERE id = ?', suggestion ? JSON.stringify(suggestion) : null, id);
+  notifyChanged('documents');
 }

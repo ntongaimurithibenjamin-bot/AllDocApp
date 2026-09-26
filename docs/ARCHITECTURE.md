@@ -512,3 +512,125 @@ Gradle deps: `play-services-mlkit-document-scanner:16.0.0`, `androidx.exifinterf
 **Tests:** 29 in total. They include page-service rollback and file clean-up (native image processing and the filesystem mocked, real SQLite) and the page-edit rules (rotation, crop normalisation, quad validity).
 
 **Dev machine note:** the dev PC has 7.8 GB RAM. Don't run a Gradle native build and the emulator at the same time. Build first, then boot the emulator (or use a USB phone, or `eas build --profile development`).
+
+---
+
+## 15. Reader Step 2 — Office files & "Open with Docuna" (2026-09-25)
+
+**Formats**
+
+| Kind | Extensions | How it's read |
+|---|---|---|
+| `word` | .docx | mammoth 1.12.3 → HTML (Title/Subtitle styles mapped to headings) |
+| `sheet` | .xlsx .xls .ods .csv .tsv | SheetJS CE 0.20.3 → table per sheet, sheet tabs, ≤5,000 rows per sheet, formulas without a stored value shown as `=FORMULA` |
+| `slides` | .pptx | JSZip 3.10.2: per-slide title, text (with levels) and images, rendered one slide at a time |
+| `other` | .doc .ppt .odt .odp .rtf .epub … | stored in Docuna; "Open in another app" / Share |
+
+- The converters run inside the reader WebView (`file:///android_asset/office/office.html`), not in Hermes, so a large file can't freeze the app.
+- The office viewer's CSP allows only Docuna's own scripts and no network, so converted document HTML can never execute code.
+- The viewer uses the same bridge as the other readers: page/progress, zoom badge, tap-to-toggle controls, search with highlights, night mode.
+- The libraries are vendored in `vendor/office` (licences included). Update them with `scripts/update-office-libs.sh`.
+- Migration 5 drops the CHECK on `documents.kind`, so the app validates kinds and new formats won't need another table rebuild.
+
+**"Open with Docuna" / Share**
+- **Intent filters** (`app.config.ts`):
+  - VIEW: document MIME types only, so Docuna doesn't claim to be a photo viewer.
+  - SEND: documents and images.
+  - SEND_MULTIPLE: images and PDFs.
+- **Native side** (`IncomingFiles.kt`): reads the display name, size and type of `content://` URIs and copies them into app storage straight away, while the temporary read grant is valid. It reports each intent once, both at launch (`consumeIncomingFilesAsync`) and while running (`onIncomingFiles` event).
+- **JS side:**
+  - `IncomingFilesHandler`: imports incoming files. One file opens in the reader; several are added with a toast.
+  - `+native-intent.tsx`: keeps `content://` URLs out of the router.
+- **Open in another app:** hands a temporary copy, under the document's name, to Android's VIEW chooser with a one-file read grant.
+
+**Identity:** the package is now `com.variety_tech.docuna` (publisher domain variety-tech.com; hyphens aren't allowed in package names).
+
+**Local builds (Windows):** something on the dev PC keeps `android/` locked, so `expo prebuild --clean` can't delete it. Builds currently run from `../docuna-build`, which links to this repo's `node_modules`, `src`, `modules`, `plugins`, `vendor`, `reader-web`, `assets` and `scripts`, and holds copies of the config files. Prebuild there creates a fresh `android/`. Refresh the copied config files before rebuilding. EAS cloud builds are unaffected.
+
+**Verified on the Redmi A1:**
+- Open-with delivery while running, and from a cold start.
+- Word, Excel and PowerPoint rendering, including the fixes.
+- The fallback screen and Open in another app.
+- List icons and labels.
+
+**Not yet verified:** Share from a real app (SEND). It can't be simulated from adb, because only a real sending app grants read access to the file.
+
+---
+
+## 16. Phase 3 — PDF tools (2026-09-26)
+
+**Engine decision:** `@cantoo/pdf-lib` 2.11.1 (MIT, maintained) replaces the planned PdfBox-Android. PdfBox was last released in January 2023 and needs BouncyCastle, adding 10+ MB to the APK.
+- Metro and Jest resolve pdf-lib to its self-contained UMD build (~600 KB), avoiding the CommonJS entry's HTML-parser and colour dependencies.
+- It loads lazily on first use.
+- `src/lib/textDecoderPolyfill.ts` supplies a WHATWG-exact UTF-8/Latin-1 `TextDecoder` if Hermes lacks one. It's tested against Node's decoder on random bytes.
+- pdf-lib holds a PDF in memory while editing, so there are guards: 80 MB per file, 150 MB per merge.
+
+**Operations** (`src/services/pdf/engine.ts`, tested with real pdf-lib + SQLite):
+- **Scan → PDF:** JPEG pass-through (no re-encoding), A4-width pages; cached in `pdf_uri` and rebuilt only when `pdf_stale`.
+- **Merge:** scans and PDFs, in the chosen order, into a new PDF document.
+- **Extract:** chosen pages in chosen order into a new document; ranges like "1-3, 5".
+- **Rotate:** PDF pages, in place; the file is versioned so caches refresh.
+- **Compress:** Balanced (1600 px, q70) or Smallest (1200 px, q55). Pages are re-rendered natively (PdfRenderer / image pipeline), one page at a time. Makes a copy, keeps the original, and discards the copy if it isn't smaller.
+- **Errors:** password-protected PDFs → `pdf_encrypted`; damaged → `pdf_invalid`.
+
+**Export** (`src/services/files/exportFile.ts`): scans export as a PDF named after the document, other documents as their stored file.
+- **Share / Open in another app:** a temporary copy under the human name.
+- **Save to Downloads:** MediaStore into `Download/Docuna`, no permission needed (Android 10+); falls back to the picker on Android 9 and older.
+- **Save to…:** folder picker (SAF) plus a native streaming copy.
+
+**UI:**
+- Home: "PDF tools" row.
+- `/tools` hub, general or per document.
+- `/tools/merge`: tap to order.
+- `/tools/pick`.
+- `/tools/pages`: extract or rotate. Scans show thumbnails, PDFs show page numbers, and a range box stays in sync.
+- `/tools/compress`: before/after result.
+- Reader ⋮ menu and long-press sheet: Share (scans too), Save to Downloads, Save to…, PDF tools.
+
+**Native additions:** `getPdfPageSizesAsync`, `saveToDownloadsAsync`, `copyToContentUriAsync`.
+
+**Verified on the Redmi A1:** tools row on Home, Merge (ordering, merge, toast, open result).
+
+**Not yet verified on the phone:** Extract, Rotate, Compress, Save to Downloads, Save to…
+
+**Navigation fix:** screens reached from a deep link, a shared file or `router.replace` have no history, so a bare `router.back()` threw "GO_BACK was not handled". All back actions use `goBack()` (`src/lib/navigation.ts`), which falls back to Home.
+
+## 17. Theme rotation (2026-09-26)
+
+Five themes (Indigo, Ocean, Forest, Dusk, Ember), each with a light and a dark palette, in `src/theme/palette.js` (~3 KB, no new dependencies). Light/dark/system is unchanged and independent of the theme.
+
+- **Active theme** lives in a tiny external store in `src/theme/index.ts` (`setActiveTheme`, read by `useTheme()` via `useSyncExternalStore`), so the root CSS variables, navigation theme and JS colours all switch in one render.
+- **Rotation** (`src/services/appearance.ts`, rules in `src/domain/themeRotation.ts`): when the app goes to the background we store `themeLeftAt`; on return (or cold start) we move to the next theme if it was away ≥ 5 minutes and "Refresh theme automatically" is on. Colours never change while the app is on screen. One rotation per absence.
+- **Settings → Theme:** swatch picker plus the auto-refresh switch.
+- **Reader content** (PDF pages, scans, Office/text HTML) keeps its own neutral colours and is never tinted.
+- **Contrast gate:** `src/theme/__tests__/palette.test.ts` requires WCAG AA (4.5:1) for every text/background pair in all 10 palettes.
+
+## 18. Phase 4 — OCR & search (2026-09-26)
+
+**Engine:** ML Kit Text Recognition v2 (Latin), **delivered by Google Play services** (`play-services-mlkit-text-recognition`). This deviates from §2's "bundled model": it costs ~260 KB instead of ~4 MB per ABI. Play Store installs fetch the model at install time (manifest `com.google.mlkit.vision.DEPENDENCIES=ocr`); sideloaded builds request it through `ModuleInstallClient` on first use. Until it is ready, native calls reject with `ERR_OCR_UNAVAILABLE` and the queue retries every minute. Phones without Play services cannot run OCR; pages simply stay pending.
+
+**Native** (`OcrEngine.kt`): `recognizeTextAsync(imageUri)` and `recognizePdfPageTextAsync(pdfUri, pageIndex)`. Images are decoded EXIF-oriented, and PDF pages are rendered by PdfRenderer to ≤2400 px (≤2000 px on low-RAM phones). One bitmap is alive at a time and freed before returning. Each call returns text, line boxes normalised to 0–1, and mean line confidence.
+
+**Schema v6:** `ocr_pages` rows address either a scanned page (`page_id`, which follows reordering) or a file page number (`page_index`, for PDFs and text files). A CHECK enforces exactly one. `documents.ocr_state` and `ocr_next_page` make file OCR resumable. The FTS index is rebuilt in the migration.
+
+**Queue** (`src/services/ocr/queue.ts`):
+- Order: scans, then text files, then PDFs; newest documents first.
+- One page per step, with a 250 ms pause between pages.
+- Runs only while the app is in the foreground and **Settings → Make documents searchable** is on.
+- Wakes on data changes.
+- Stale results are discarded: a scan page's text is saved only if its image URI (versioned on every edit) is unchanged, and a PDF page only if `ocr_next_page` still matches.
+- A failing PDF page is skipped. Encrypted or unreadable PDFs are marked failed. PDFs imported without a page count learn it first.
+- Uses the new `ocr` change topic, so the reader doesn't reload while OCR runs.
+
+**Search:** hits come from scans, PDFs and text files, with page numbers, snippets and "N more pages". Opening a result jumps to the page. For PDFs and text files, it also runs the reader's find so the match is highlighted.
+
+**Text screen** (`document/[id]/text`): per-page selectable text with a low-confidence warning. Copy page, Copy all (`expo-clipboard`), Share as `.txt`, Recognise again. Live progress, and a prompt when OCR is turned off.
+
+**Inbox suggestions** (`src/domain/suggestions.ts`, rule-based, offline):
+- Detects the document type (receipt, invoice, statement, payslip, certificate, agreement, letter, ID, medical, school) with Kenyan-specific cues such as M-PESA, PAYE, NHIF/SHIF and tenancy.
+- Reads the first date, day-first.
+- Picks the issuer from the first clean line.
+- Matches a folder by type synonym or by a folder name that appears in the text.
+- The inbox card offers "Rename to …" (only while the scan still has its generated name), "Move to <folder>" and dismiss.
+
+**Exit criterion met in tests:** "KSh 25,000" finds page 2 of a scan and page 3 of a PDF offline (`src/services/ocr/__tests__/ocr.test.ts`).

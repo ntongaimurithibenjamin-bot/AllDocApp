@@ -101,6 +101,8 @@ const config: ExpoConfig = {
     ],
     // Offline readers (PDF.js; Word/Excel/PowerPoint) bundled as Android assets.
     './plugins/withReaderAssets',
+    // OCR model from Play services at install time; dev builds keep the dev launcher's QR scanner model.
+    ['./plugins/withMlKitModels', { models: variant === 'development' ? ['ocr', 'barcode_ui'] : ['ocr'] }],
   ],
   experiments: {
     typedRoutes: true,

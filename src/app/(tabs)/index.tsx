@@ -12,6 +12,7 @@ import { Icon } from '@/components/Icon';
 import { ListRow } from '@/components/ListRow';
 import { NewFolderDialog } from '@/components/NewFolderDialog';
 import { Section } from '@/components/Section';
+import { ToolsStrip } from '@/components/ToolsStrip';
 import { getContinueReading, listDocuments } from '@/db/repositories/documents';
 import { listFolders } from '@/db/repositories/folders';
 import type { Document } from '@/domain/models';
@@ -111,6 +112,10 @@ export default function HomeScreen() {
             )}
           </Section>
         ) : null}
+
+        <Section title="PDF tools" actionLabel="All tools" onAction={() => router.push('/tools')}>
+          <ToolsStrip />
+        </Section>
 
         {data ? (
           <Section title="Folders" actionLabel="New folder" onAction={() => setNewFolderVisible(true)}>

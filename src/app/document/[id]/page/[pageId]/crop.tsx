@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -15,6 +15,7 @@ import type { CropQuad } from '@/domain/models';
 import { FULL_PAGE_QUAD, isValidQuad } from '@/domain/pageEdits';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useDb, useDbQuery } from '@/hooks/useDbQuery';
+import { goBack } from '@/lib/navigation';
 import { getImageSize } from '@/services/image';
 import { editPage } from '@/services/pages/pageService';
 import { useTheme } from '@/theme';
@@ -109,7 +110,7 @@ export default function CropScreen() {
       return;
     }
     await editPage(db, pageId, { crop });
-    router.back();
+    goBack();
   });
 
   const rect = container && data ? containRect(container, data.size) : null;
@@ -122,7 +123,7 @@ export default function CropScreen() {
   });
 
   if (error) return <ErrorView error={error} onRetry={refresh} />;
-  if (data === null) return <EmptyState icon="file-hidden" title="Page not found" actionLabel="Go back" onAction={() => router.back()} />;
+  if (data === null) return <EmptyState icon="file-hidden" title="Page not found" actionLabel="Go back" onAction={() => goBack()} />;
 
   const onLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
